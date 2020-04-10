@@ -28,6 +28,7 @@ class OmniglotModel:
                                                                    logits=self.logits)
         self.predictions = tf.argmax(self.logits, axis=-1)
         self.minimize_op = optimizer(**optim_kwargs).minimize(self.loss)
+        self.optimizer = optimizer
 
 # pylint: disable=R0903
 class MiniImageNetModel:
@@ -49,3 +50,4 @@ class MiniImageNetModel:
                                                                    logits=self.logits)
         self.predictions = tf.argmax(self.logits, axis=-1)
         self.minimize_op = optimizer(**optim_kwargs).minimize(self.loss)
+        self.optimizer = optimizer
