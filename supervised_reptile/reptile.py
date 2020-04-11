@@ -41,7 +41,7 @@ class Reptile:
                    inner_iters,
                    replacement,
                    meta_step_size,
-                   meta_batch_size):
+                   meta_batch_size, on_eval_iter=None):
         """
         Perform a Reptile training step.
 
@@ -163,7 +163,7 @@ class FlowMAML(Reptile):
         self._learning_rate = model.learning_rate
         self.tail_shots = tail_shots
  
-        loss_gvs = model.optimizer.compute_gradients(model.loss_op, var_list=variables)
+        loss_gvs = model.optimizer.compute_gradients(model.loss, var_list=variables)
         loss_grads = [x for x, y in loss_gvs]
 
         self._next_updates_phs = [tf.placeholder(v.dtype.base_dtype, shape=v.get_shape()) for v in \
@@ -172,8 +172,8 @@ class FlowMAML(Reptile):
         second_grad_loss = tf.add_n([tf.reduce_sum(x*y) for x, y in zip(loss_grads,
             self._next_updates_phs) if x is not None])
 
-        self._second_grads_tensor = optimizer.compute_gradients(second_grad_loss,
-            var_list=variables)
+        self._second_grads_tensor = [x for x, y in model.optimizer.compute_gradients(second_grad_loss,
+            var_list=variables)]
 
     # pylint: disable=R0913,R0914
     def train_step(self,
@@ -187,12 +187,12 @@ class FlowMAML(Reptile):
                    inner_iters,
                    replacement,
                    meta_step_size,
-                   meta_batch_size):
+                   meta_batch_size, on_eval_iter=None):
 
         init_vars = self._model_state.export_variables()
         updates = []
 
-        if self._with_errors:
+        if self._with_errors and on_eval_iter:
             foml_updates = []
             reptile_updates = []
             flowmaml_updates = []
@@ -233,22 +233,22 @@ class FlowMAML(Reptile):
                     cur_vars = next_vars
                     var_states.append(cur_vars)
 
-            if self._with_errors:
+            if self._with_errors and on_eval_iter:
 
                 foml_updates.append(next_updates)
                 reptile_updates.append(scale_vars(subtract_vars(cur_vars, init_vars),
                     self._learning_rate))
-                flowmaml_updates.append(self._get_updates(minimize_op, cur_vars, next_updates,
-                    mini_dataset, index_mini_batches, None))
+                flowmaml_updates.append(self._get_updates(input_ph, label_ph, minimize_op, cur_vars,
+                    next_updates, mini_dataset, index_mini_batches, None))
 
-            updates.append(self._get_updates(minimize_op, cur_vars, next_updates, mini_dataset,
-                index_mini_batches, var_states))
+            updates.append(self._get_updates(input_ph, label_ph, minimize_op, cur_vars,
+                next_updates, mini_dataset, index_mini_batches, var_states))
 
         update = average_vars(updates)
 
-        self._model_state.import_variables(add_vars(prev_vars, scale_vars(update, meta_step_size)))
+        self._model_state.import_variables(add_vars(init_vars, scale_vars(update, meta_step_size)))
 
-        if self._with_errors:
+        if self._with_errors and on_eval_iter:
 
             foml_update = average_vars(foml_updates)
             reptile_update = average_vars(reptile_updates)
@@ -263,16 +263,16 @@ class FlowMAML(Reptile):
 
         return None
 
-    def _get_updates(self, minimize_op, cur_vars, next_updates, mini_dataset, index_mini_batches,
-            var_states):
+    def _get_updates(self, input_ph, label_ph, minimize_op, cur_vars, next_updates, mini_dataset,
+            index_mini_batches, var_states):
         
-        for batch_index, index_batch in enumerate(index_mini_batches[:-1:-1]):
+        for batch_index, index_batch in enumerate(index_mini_batches[-2::-1]):
 
             batch = [mini_dataset[i] for i in index_batch]
             inputs, labels = zip(*batch)
 
             if var_states is not None:
-                cur_vars = var_states[inner_iters - 2 - batch_index]
+                cur_vars = var_states[len(var_states) - 2 - batch_index]
 
             self._model_state.import_variables(cur_vars)
 
@@ -280,17 +280,30 @@ class FlowMAML(Reptile):
                 self.session.run(self._pre_step_op)
 
             _, second_grads = self.session.run([minimize_op, self._second_grads_tensor],
-                feed_dict={input_ph: inputs, label_ph: labels,
-                self._next_updates_phs: next_updates})
-
-            updates = subtract_vars(self._model_state.export_variables(), cur_vars)
+                feed_dict={input_ph: inputs, label_ph: labels, **dict(zip(self._next_updates_phs,
+                next_updates))})
 
             if var_states is None:
+                updates = subtract_vars(self._model_state.export_variables(), cur_vars)
                 cur_vars = subtract_vars(cur_vars, updates)
-                next_updates = subtract_vars(next_updates, scale_vars(second_grads,
-                    self._learning_rate))
+
+            next_updates = subtract_vars(next_updates, scale_vars(second_grads,
+                self._learning_rate))
 
         return next_updates
+ 
+    def _mini_batches(self, mini_dataset, inner_batch_size, inner_iters, replacement):
+        """
+        Generate inner-loop mini-batches for the task.
+        """
+        if self.tail_shots is None:
+            for value in _mini_batches(mini_dataset, inner_batch_size, inner_iters, replacement):
+                yield value
+            return
+        train, tail = _split_train_test(mini_dataset, test_shots=self.tail_shots)
+        for batch in _mini_batches(train, inner_batch_size, inner_iters - 1, replacement):
+            yield batch
+        yield tail
 
 
 class FOML(Reptile):
@@ -336,7 +349,7 @@ class FOML(Reptile):
                    inner_iters,
                    replacement,
                    meta_step_size,
-                   meta_batch_size):
+                   meta_batch_size, on_eval_iter=None):
         old_vars = self._model_state.export_variables()
         updates = []
         for _ in range(meta_batch_size):

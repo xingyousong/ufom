@@ -47,6 +47,11 @@ def train(sess,
     accuracy_ph = tf.placeholder(tf.float32, shape=())
     tf.summary.scalar('accuracy', accuracy_ph)
     merged = tf.summary.merge_all()
+
+    grad_error_phs = [tf.placeholder(tf.float32, shape=()) for _ in range(3)]
+    grad_error_summaries = [tf.summary.scalar(y, x) for x, y in zip(grad_error_phs,
+        ['foml_grad_error', 'reptile_grad_error', 'flowmaml_grad_error'])]
+
     train_writer = tf.summary.FileWriter(os.path.join(save_dir, 'train'), sess.graph)
     test_writer = tf.summary.FileWriter(os.path.join(save_dir, 'test'), sess.graph)
     tf.global_variables_initializer().run()
@@ -55,13 +60,15 @@ def train(sess,
         frac_done = i / meta_iters
         cur_meta_step_size = frac_done * meta_step_size_final + (1 - frac_done) * meta_step_size
 
+        on_eval_iter = (i%eval_interval == 0)
+
         result = reptile.train_step(train_set, model.input_ph, model.label_ph, model.minimize_op,
                 num_classes=num_classes, num_shots=(train_shots or num_shots),
                 inner_batch_size=inner_batch_size, inner_iters=inner_iters,
                 replacement=replacement, meta_step_size=cur_meta_step_size,
-                meta_batch_size=meta_batch_size)
+                meta_batch_size=meta_batch_size, on_eval_iter=on_eval_iter)
 
-        if i % eval_interval == 0:
+        if on_eval_iter:
             accuracies = []
             for dataset, writer in [(train_set, train_writer), (test_set, test_writer)]:
                 correct = reptile.evaluate(dataset, model.input_ph, model.label_ph,
@@ -70,11 +77,21 @@ def train(sess,
                                            inner_batch_size=eval_inner_batch_size,
                                            inner_iters=eval_inner_iters, replacement=replacement)
                 summary = sess.run(merged, feed_dict={accuracy_ph: correct/num_classes})
-                writer.add_summary(summary, i)
-                writer.flush()
+                writer.add_summary(summary, i) 
                 accuracies.append(correct / num_classes)
             log_fn('batch %d: train=%f test=%f' % (i, accuracies[0], accuracies[1]))
-            log_fn('foml error - {0}, reptile error - {1}, flowmaml error - {2}'.format(result))
+
+            if result is not None:
+
+                log_fn('foml error - {0}, reptile error - {1}, flowmaml error - {2}'.format(*result))
+                summaries = sess.run(grad_error_summaries, feed_dict=dict(zip(grad_error_phs,
+                    result)))
+
+                for summary in summaries:
+                    train_writer.add_summary(summary, i)
+
+            train_writer.flush()
+            test_writer.flush()
 
         if i % 100 == 0 or i == meta_iters-1:
             saver.save(sess, os.path.join(save_dir, 'model.ckpt'), global_step=i)

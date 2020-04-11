@@ -21,28 +21,26 @@ class OmniglotModel:
 
         for _ in range(4):
 
-            out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
+            out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')/3
 
             if optim_kwargs['batchnorm']:
                 out = tf.layers.batch_normalization(out, training=True)
 
             if optim_kwargs['nonlin'] == 'softplus':
-                out = tf.math.softplus(out)
+                out = tf.math.softplus(out*optim_kwargs['temp'])/optim_kwargs['temp']
             else:
                 out = tf.nn.relu(out)
 
         out = tf.reshape(out, (-1, int(np.prod(out.get_shape()[1:]))))
         self.logits = tf.layers.dense(out, num_classes)
         self.label_ph = tf.placeholder(tf.int32, shape=(None,))
- 
         #self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph,
         #                                                           logits=self.logits)
         self.loss = get_cross_entropy(self.logits, self.label_ph, num_classes)
         self.predictions = tf.argmax(self.logits, axis=-1)
 
-        optimizer_instance = optimizer(**optim_kwargs)
-
         self.learning_rate = optim_kwargs['learning_rate']
+        optimizer_instance = optimizer(self.learning_rate)
         self.minimize_op = optimizer_instance.minimize(self.loss)
         self.optimizer = optimizer_instance
 
@@ -55,7 +53,7 @@ class MiniImageNetModel:
         self.input_ph = tf.placeholder(tf.float32, shape=(None, 84, 84, 3))
         out = self.input_ph
         for _ in range(4):
-            out = tf.layers.conv2d(out, 32, 3, padding='same')
+            out = tf.layers.conv2d(out, 32, 3, padding='same')/3
 
             if optim_kwargs['batchnorm']:
                 out = tf.layers.batch_normalization(out, training=True)
@@ -63,7 +61,7 @@ class MiniImageNetModel:
             out = tf.layers.max_pooling2d(out, 2, 2, padding='same')
 
             if optim_kwargs['nonlin'] == 'softplus':
-                out = tf.math.softplus(out)
+                out = tf.math.softplus(out*optim_kwargs['temp'])/optim_kwargs['temp']
             else:
                 out = tf.nn.relu(out)
 
@@ -74,10 +72,9 @@ class MiniImageNetModel:
         #                                                           logits=self.logits)
         self.loss = get_cross_entropy(self.logits, self.label_ph, num_classes)
         self.predictions = tf.argmax(self.logits, axis=-1)
- 
-        optimizer_instance = optimizer(**optim_kwargs)
- 
+  
         self.learning_rate = optim_kwargs['learning_rate']
+        optimizer_instance = optimizer(self.learning_rate)
         self.minimize_op = optimizer_instance.minimize(self.loss)
         self.optimizer = optimizer_instance
 
@@ -87,6 +84,6 @@ def get_cross_entropy(logits, labels, num_classes):
     logits = logits - tf.reduce_logsumexp(logits, axis=-1, keepdims=True)
     labels = tf.one_hot(labels, num_classes)
 
-    result = -tf.reduce_sum(logits*labels)
+    result = -tf.reduce_sum(logits*labels, axis=1)
 
     return result

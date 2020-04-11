@@ -39,7 +39,8 @@ def argument_parser():
     #parser.add_argument('--foml', help='use FOML instead of Reptile', action='store_true')
     parser.add_argument('--mode', help='Reptile, FOML, FlowMAML, MAML, MAML_w_errors',
         default='Reptile', type=str)
-    parser.add_argument('--nonlin', help='', default='relu', type=str)
+    parser.add_argument('--nonlin', help='relu, softplus', default='relu', type=str)
+    parser.add_argument('--temp', help='', default=1.0, type=float)
     parser.add_argument('--batchnorm', help='', action='store_true')
     parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
                         default=None, type=int)
@@ -52,9 +53,7 @@ def model_kwargs(parsed_args):
     parsed command-line arguments.
     """
     res = {'learning_rate': parsed_args.learning_rate, 'nonlin': parsed_args.nonlin,
-        'batchnorm': parsed_args.batchnorm}
-
-    print('MODEL KWARGS', res)
+        'batchnorm': parsed_args.batchnorm, 'temp': parsed_args.temp}
 
     if parsed_args.sgd:
         res['optimizer'] = tf.train.GradientDescentOptimizer
