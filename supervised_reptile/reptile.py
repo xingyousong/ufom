@@ -59,8 +59,8 @@ class BitMAML:
         next_grad_phs = [tf.placeholder(v.dtype.base_dtype, shape=v.get_shape()) for v in \
             self._trainable_variables]
 
-        second_grad_loss = tf.add_n([x*y for x, y in zip(loss_grads, next_grad_phs) if x is \
-            not None])
+        second_grad_loss = tf.add_n([tf.reduce_sum(x*y) for x, y in zip(loss_grads,
+            next_grad_phs) if x is not None])
 
         second_grads_tensor = optimizer.compute_gradients(second_grad_loss,
             var_list=self._trainable_variables)
