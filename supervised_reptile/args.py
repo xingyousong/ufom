@@ -41,7 +41,7 @@ def argument_parser():
         default='Reptile', type=str)
     parser.add_argument('--nonlin', help='relu, softplus', default='relu', type=str)
     parser.add_argument('--temp', help='', default=1.0, type=float)
-    parser.add_argument('--batchnorm', help='', action='store_true')
+    parser.add_argument('--nobatchnorm', help='', action='store_true')
     parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
                         default=None, type=int)
     parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
@@ -53,7 +53,7 @@ def model_kwargs(parsed_args):
     parsed command-line arguments.
     """
     res = {'learning_rate': parsed_args.learning_rate, 'nonlin': parsed_args.nonlin,
-        'batchnorm': parsed_args.batchnorm, 'temp': parsed_args.temp}
+        'nobatchnorm': parsed_args.nobatchnorm, 'temp': parsed_args.temp}
 
     if parsed_args.sgd:
         res['optimizer'] = tf.train.GradientDescentOptimizer

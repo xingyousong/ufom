@@ -23,7 +23,7 @@ class OmniglotModel:
 
             out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')/3
 
-            if optim_kwargs['batchnorm']:
+            if not optim_kwargs['nobatchnorm']:
                 out = tf.layers.batch_normalization(out, training=True)
 
             if optim_kwargs['nonlin'] == 'softplus':
