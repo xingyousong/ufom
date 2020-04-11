@@ -15,17 +15,26 @@ class OmniglotModel:
     A model for Omniglot classification.
     """
     def __init__(self, num_classes, optimizer=DEFAULT_OPTIMIZER, **optim_kwargs):
+
         self.input_ph = tf.placeholder(tf.float32, shape=(None, 28, 28))
         out = tf.reshape(self.input_ph, (-1, 28, 28, 1))
+
         for _ in range(4):
+
             out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
-            out = tf.layers.batch_normalization(out, training=True)
-            out = tf.nn.relu(out)
+
+            if optim_kwargs['batchnorm']:
+                out = tf.layers.batch_normalization(out, training=True)
+
+            if optim_kwargs['nonlin'] == 'softplus':
+                out = tf.math.softplus(out)
+            else:
+                out = tf.nn.relu(out)
+
         out = tf.reshape(out, (-1, int(np.prod(out.get_shape()[1:]))))
         self.logits = tf.layers.dense(out, num_classes)
         self.label_ph = tf.placeholder(tf.int32, shape=(None,))
-
-        
+ 
         #self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph,
         #                                                           logits=self.logits)
         self.loss = get_cross_entropy(self.logits, self.label_ph, num_classes)
@@ -47,9 +56,17 @@ class MiniImageNetModel:
         out = self.input_ph
         for _ in range(4):
             out = tf.layers.conv2d(out, 32, 3, padding='same')
-            out = tf.layers.batch_normalization(out, training=True)
+
+            if optim_kwargs['batchnorm']:
+                out = tf.layers.batch_normalization(out, training=True)
+
             out = tf.layers.max_pooling2d(out, 2, 2, padding='same')
-            out = tf.nn.relu(out)
+
+            if optim_kwargs['nonlin'] == 'softplus':
+                out = tf.math.softplus(out)
+            else:
+                out = tf.nn.relu(out)
+
         out = tf.reshape(out, (-1, int(np.prod(out.get_shape()[1:]))))
         self.logits = tf.layers.dense(out, num_classes)
         self.label_ph = tf.placeholder(tf.int32, shape=(None,))
