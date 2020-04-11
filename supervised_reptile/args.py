@@ -7,7 +7,7 @@ from functools import partial
 
 import tensorflow.compat.v1 as tf
 
-from .reptile import Reptile, FOML, BitMAML
+from .reptile import Reptile, FOML, FlowMAML
 
 def argument_parser():
     """
@@ -37,9 +37,8 @@ def argument_parser():
     parser.add_argument('--weight-decay', help='weight decay rate', default=1, type=float)
     parser.add_argument('--transductive', help='evaluate all samples at once', action='store_true')
     #parser.add_argument('--foml', help='use FOML instead of Reptile', action='store_true')
-    parser.add_argument('--mode', help='Reptile, FOML, BitMAML', default='Reptile', type=str)
-    parser.add_argument('--beta', help='', default=0.5, type=float)
-    parser.add_argument('--on_exact_bitmaml', help='', action='store_true')
+    parser.add_argument('--mode', help='Reptile, FOML, FlowMAML, MAML, MAML_w_errors',
+        default='Reptile', type=str)
     parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
                         default=None, type=int)
     parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
@@ -101,9 +100,17 @@ def _args_reptile(parsed_args):
     if parsed_args.mode == 'FOML':
         return partial(FOML, tail_shots=parsed_args.foml_tail)
 
-    if parsed_args.mode == 'BitMAML':
-        return partial(BitMAML, tail_shots=parsed_args.foml_tail, beta=parsed_args.beta,
-            on_exact_grads=parsed_args.on_exact_bitmaml)
+    if parsed_args.mode == 'FlowMAML':
+        return partial(FlowMAML, tail_shots=parsed_args.foml_tail, on_exact_grads=False,
+            with_errors=False)
+
+    if parsed_args.mode == 'MAML':
+        return partial(FlowMAML, tail_shots=parsed_args.foml_tail, on_exact_grads=True,
+            with_errors=False)
+
+    if parsed_args.mode == 'MAML_w_errors':
+        return partial(FlowMAML, tail_shots=parsed_args.foml_tail, on_exact_grads=True,
+            with_errors=True)
 
     if parsed_args.mode == 'Reptile':
         return Reptile

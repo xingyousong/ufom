@@ -32,6 +32,7 @@ class OmniglotModel:
 
         optimizer_instance = optimizer(**optim_kwargs)
 
+        self.learning_rate = optim_kwargs['learning_rate']
         self.minimize_op = optimizer_instance.minimize(self.loss)
         self.optimizer = optimizer_instance
 
@@ -56,7 +57,8 @@ class MiniImageNetModel:
         self.predictions = tf.argmax(self.logits, axis=-1)
  
         optimizer_instance = optimizer(**optim_kwargs)
-
+ 
+        self.learning_rate = optim_kwargs['learning_rate']
         self.minimize_op = optimizer_instance.minimize(self.loss)
         self.optimizer = optimizer_instance
 
