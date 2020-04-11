@@ -26,8 +26,9 @@ class OmniglotModel:
         self.label_ph = tf.placeholder(tf.int32, shape=(None,))
 
         
-        self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph,
-                                                                   logits=self.logits)
+        #self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph,
+        #                                                           logits=self.logits)
+        self.loss = get_cross_entropy(self.logits, self.label_ph, num_classes)
         self.predictions = tf.argmax(self.logits, axis=-1)
 
         optimizer_instance = optimizer(**optim_kwargs)
@@ -52,8 +53,9 @@ class MiniImageNetModel:
         out = tf.reshape(out, (-1, int(np.prod(out.get_shape()[1:]))))
         self.logits = tf.layers.dense(out, num_classes)
         self.label_ph = tf.placeholder(tf.int32, shape=(None,))
-        self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph,
-                                                                   logits=self.logits)
+        #self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.label_ph,
+        #                                                           logits=self.logits)
+        self.loss = get_cross_entropy(self.logits, self.label_ph, num_classes)
         self.predictions = tf.argmax(self.logits, axis=-1)
  
         optimizer_instance = optimizer(**optim_kwargs)
@@ -63,4 +65,11 @@ class MiniImageNetModel:
         self.optimizer = optimizer_instance
 
 
-def get_cross_entropy()
+def get_cross_entropy(logits, labels, num_classes):
+
+    logits = logits - tf.reduce_logsumexp(logits, axis=-1, keepdims=True)
+    labels = tf.one_hot(labels, num_classes)
+
+    result = -tf.reduce_sum(logits*labels)
+
+    return result
