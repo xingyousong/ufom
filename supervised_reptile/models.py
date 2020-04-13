@@ -21,7 +21,7 @@ class OmniglotModel:
 
         for index in range(4):
 
-            if optim_kwargs['orth_norm']:
+            if optim_kwargs['orth_norm'] and index > 0:
                 kernel = tf.Variable(initial_value=tf.random.normal([9*64, 64]), trainable=True)
                 kernel = compute_cwy(kernel)
                 kernel = tf.reshape(kernel, [3, 3, 64, 64])
@@ -60,9 +60,9 @@ class MiniImageNetModel:
     def __init__(self, num_classes, optimizer=DEFAULT_OPTIMIZER, **optim_kwargs):
         self.input_ph = tf.placeholder(tf.float32, shape=(None, 84, 84, 3))
         out = self.input_ph
-        for _ in range(4):
+        for index in range(4):
 
-            if optim_kwargs['orth_norm']:
+            if optim_kwargs['orth_norm'] and index > 0:
                 kernel = tf.Variable(initial_value=tf.random.normal([9*32, 32]), trainable=True)
                 kernel = compute_cwy(kernel)
                 kernel = tf.reshape(kernel, [3, 3, 32, 32])
