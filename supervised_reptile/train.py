@@ -5,7 +5,7 @@ Training helpers for supervised meta-learning.
 import os
 import time
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from .reptile import Reptile
 from .variables import weight_decay
