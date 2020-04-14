@@ -61,8 +61,6 @@ class MiniImageNetModel:
         for index in range(4):
 
             out = tf.layers.conv2d(out, 32, 3, padding='same')
-
-            if not optim_kwargs['nobatchnorm']:
  
                 if optim_kwargs['precond']:
                     out -= tf.math.reduce_mean(out, axis=(0, 1, 2), keepdims=True)
