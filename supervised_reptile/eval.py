@@ -23,7 +23,8 @@ def evaluate(sess,
     """
     reptile = reptile_fn(sess,
                          transductive=transductive,
-                         pre_step_op=weight_decay(weight_decay_rate))
+                         pre_step_op=weight_decay(weight_decay_rate),
+                         model=model)
     total_correct = 0
     for _ in range(num_samples):
         total_correct += reptile.evaluate(dataset, model.input_ph, model.label_ph,

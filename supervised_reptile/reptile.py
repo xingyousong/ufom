@@ -138,18 +138,19 @@ class Reptile:
         return res
 
 
-class FlowMAML(Reptile):
+class MAML(Reptile):
     '''
     Not compatible with adaptive optimizers in `minimize_op`.
     '''
 
-    def __init__(self, session, on_exact_grads=None, with_errors=None, model=None,
-            tail_shots=None, variables=None, transductive=False, pre_step_op=None):
+    def __init__(self, session, mode=None, model=None, tail_shots=None, variables=None,
+            transductive=False, pre_step_op=None, lightmaml_inner_iters=None,
+            lightmaml_outer_iters=None):
 
         self.session = session
 
         if variables is None:
-            variables = [y for x, y in model.gvs]#tf.trainable_variables()
+            variables = [y for x, y in model.gvs]
 
         self._model_state = VariableState(self.session, variables)
         self._full_state = VariableState(self.session,
@@ -158,21 +159,21 @@ class FlowMAML(Reptile):
         self._transductive = transductive
         self._pre_step_op = pre_step_op
 
-        self.on_exact_grads = on_exact_grads
-        self._with_errors = with_errors
+        self.mode = mode
+        self.lightmaml_inner_iters = lightmaml_inner_iters
+        self.lightmaml_outer_iters = lightmaml_outer_iters
         self._learning_rate = model.learning_rate
         self.tail_shots = tail_shots
- 
-        #loss_gvs = model.optimizer.compute_gradients(model.loss, var_list=variables)
+
         loss_grads = [x for x, y in model.gvs]
 
-        self._next_updates_phs = [tf.placeholder(v.dtype.base_dtype, shape=v.get_shape()) for v in \
-            variables]
+        self._hess_prod_arg_phs = [tf.placeholder(v.dtype.base_dtype, shape=v.get_shape()) \
+            for v in variables]
 
         second_grad_loss = tf.add_n([tf.reduce_sum(x*y) for x, y in zip(loss_grads,
-            self._next_updates_phs) if x is not None])
+            self._hess_prod_arg_phs) if x is not None])
 
-        self._second_grads_tensor = [x for x, y in model.optimizer.compute_gradients(second_grad_loss,
+        self._hess_prod = [x for x, y in model.optimizer.compute_gradients(second_grad_loss,
             var_list=variables)]
 
     # pylint: disable=R0913,R0914
@@ -187,17 +188,16 @@ class FlowMAML(Reptile):
                    inner_iters,
                    replacement,
                    meta_step_size,
-                   meta_batch_size, on_eval_iter=None):
+                   meta_batch_size,
+                   on_eval_iter=None):
 
         init_vars = self._model_state.export_variables()
         updates = []
 
-        if self._with_errors and on_eval_iter:
-            foml_updates = []
-            reptile_updates = []
-            flowmaml_updates = []
+        if self.mode == 'MAML_w_errors' and on_eval_iter:
+            lightmaml_updates = []
 
-        for _ in range(meta_batch_size):
+        for meta_batch_index in range(meta_batch_size):
 
             mini_dataset = list(_sample_mini_dataset(dataset, num_classes, num_shots))
             indices = range(len(mini_dataset))
@@ -205,10 +205,11 @@ class FlowMAML(Reptile):
             index_mini_batches = list(self._mini_batches(indices, inner_batch_size, inner_iters,
                 replacement))
 
+            self._model_state.import_variables(init_vars)
             cur_vars = init_vars
             next_updates = None
 
-            if self.on_exact_grads:
+            if self.mode in ['MAML', 'MAML_w_errors']:
                 var_states = [cur_vars]
             else:
                 var_states = None
@@ -218,79 +219,121 @@ class FlowMAML(Reptile):
                 batch = [mini_dataset[i] for i in index_batch]
                 inputs, labels = zip(*batch)
 
-                self._model_state.import_variables(cur_vars)
-
                 if self._pre_step_op:
                     self.session.run(self._pre_step_op)
+
+                if self.mode == 'MAML_w_errors' and on_eval_iter:
+                    singular_value = _power_method(self._hess_prod_arg_phs, self.session,
+                            self._hess_prod, input_ph, label_ph, inputs, labels)
 
                 self.session.run(minimize_op, feed_dict={input_ph: inputs, label_ph: labels})
 
                 next_vars = self._model_state.export_variables()
 
                 if batch_index == inner_iters - 1:
-                    next_updates = subtract_vars(next_vars, cur_vars)
-                elif self.on_exact_grads:
+                    batch_updates = subtract_vars(next_vars, cur_vars)
+                else:
+
                     cur_vars = next_vars
-                    var_states.append(cur_vars)
 
-            if self._with_errors and on_eval_iter:
+                    if self.mode in ['MAML', 'MAML_w_errors']:
+                        var_states.append(cur_vars)
 
-                foml_updates.append(next_updates)
-                reptile_updates.append(scale_vars(subtract_vars(cur_vars, init_vars),
-                    self._learning_rate))
-                flowmaml_updates.append(self._get_updates(input_ph, label_ph, minimize_op, cur_vars,
-                    next_updates, mini_dataset, index_mini_batches, None))
+            if self.mode == 'MAML_w_errors' and on_eval_iter:
+                lightmaml_updates.append(self._get_lightmaml_batch_updates(input_ph, label_ph,
+                    minimize_op, init_vars, batch_updates, mini_dataset, index_mini_batches,
+                    self.lightmaml_inner_iters, self.lightmaml_outer_iters, True))
 
-            updates.append(self._get_updates(input_ph, label_ph, minimize_op, cur_vars,
-                next_updates, mini_dataset, index_mini_batches, var_states))
+            if self.mode in ['MAML_w_errors', 'MAML']:
+                updates.append(self._get_exact_batch_updates(input_ph, label_ph, minimize_op,
+                    cur_vars, batch_updates, mini_dataset, index_mini_batches, var_states))
+            elif self.mode == 'LightMAML':
+                updates.append(self._get_lightmaml_batch_updates(input_ph, label_ph,
+                    minimize_op, init_vars, batch_updates, mini_dataset, index_mini_batches,
+                    self.lightmaml_inner_iters, self.lightmaml_outer_iters, False))
 
         update = average_vars(updates)
 
         self._model_state.import_variables(add_vars(init_vars, scale_vars(update, meta_step_size)))
 
-        if self._with_errors and on_eval_iter:
+        if self.mode == 'MAML_w_errors' and on_eval_iter:
 
-            foml_update = average_vars(foml_updates)
-            reptile_update = average_vars(reptile_updates)
-            flowmaml_update = average_vars(flowmaml_updates)
+            update_diffs = [subtract_vars(update, average_vars(x)) for x in \
+                list(zip(*lightmaml_updates))]
 
-            update_diffs = [subtract_vars(update, upd) for upd in [foml_update, reptile_update,
-                flowmaml_update]]
+            update_norm = np.sqrt(np.sum([(x**2).sum() for x in update]))
+            errors = [np.sqrt(np.sum([(x**2).sum() for x in d]))/update_norm for d in update_diffs]
 
-            errors = [np.sqrt(np.sum([(x**2).sum() for x in d])) for d in update_diffs]
-
-            return errors
+            return singular_value, errors
 
         return None
 
-    def _get_updates(self, input_ph, label_ph, minimize_op, cur_vars, next_updates, mini_dataset,
-            index_mini_batches, var_states):
+    def _get_exact_batch_updates(self, input_ph, label_ph, minimize_op, cur_vars, batch_updates,
+            mini_dataset, index_mini_batches, var_states):
         
         for batch_index, index_batch in enumerate(index_mini_batches[-2::-1]):
 
             batch = [mini_dataset[i] for i in index_batch]
             inputs, labels = zip(*batch)
 
-            if var_states is not None:
-                cur_vars = var_states[len(var_states) - 2 - batch_index]
+            cur_vars = var_states[len(var_states) - 2 - batch_index]
 
             self._model_state.import_variables(cur_vars)
 
             if self._pre_step_op:
                 self.session.run(self._pre_step_op)
+ 
+            hess_prod = self.session.run(self._hess_prod, feed_dict={x:y for x, y in \
+                zip([input_ph, label_ph] + self._hess_prod_arg_phs, [inputs, labels] + \
+                batch_updates)})
 
-            _, second_grads = self.session.run([minimize_op, self._second_grads_tensor],
-                feed_dict={input_ph: inputs, label_ph: labels, **dict(zip(self._next_updates_phs,
-                next_updates))})
-
-            if var_states is None:
-                updates = subtract_vars(self._model_state.export_variables(), cur_vars)
-                cur_vars = subtract_vars(cur_vars, updates)
-
-            next_updates = subtract_vars(next_updates, scale_vars(second_grads,
+            batch_updates = subtract_vars(batch_updates, scale_vars(hess_prod,
                 self._learning_rate))
 
-        return next_updates
+        return batch_updates
+
+    def _get_lightmaml_batch_updates(self, input_ph, label_ph, minimize_op, init_vars,
+            batch_updates, mini_dataset, index_mini_batches, lightmaml_inner_iters,
+            lightmaml_outer_iters, return_iter_results):
+
+        init_batch_updates = batch_updates
+
+        if return_iter_results:
+            iter_results = []
+
+        def lightmaml_inner_matmul(index_batch, x, last=None):
+
+            batch = [mini_dataset[i] for i in index_batch]
+            inputs, labels = zip(*batch)
+
+            if self._pre_step_op:
+                self.session.run(self._pre_step_op)
+
+            to_compute = [self._hess_prod]
+
+            if last:
+                to_compute.append(minimize_op)
+
+            hess_prod = self.session.run(to_compute, feed_dict={z:y for z, y in zip([input_ph,
+                label_ph] + self._hess_prod_arg_phs, [inputs, labels] + x)})[0]
+
+            return subtract_vars(x, scale_vars(hess_prod, self._learning_rate))
+
+        def lightmaml_outer_matmul(x, last=None):
+
+            self._model_state.import_variables(init_vars)
+ 
+            for index_batch in index_mini_batches[:-1]:
+
+                def matmul(x_inner, last=None):
+                    return lightmaml_inner_matmul(index_batch, x_inner, last=last)
+
+                x = _simple_solve(matmul, x, lightmaml_inner_iters)
+
+            return x
+
+        return _cg_solve(lightmaml_outer_matmul, batch_updates, lightmaml_outer_iters,
+                return_iter_results=return_iter_results)
  
     def _mini_batches(self, mini_dataset, inner_batch_size, inner_iters, replacement):
         """
@@ -304,6 +347,86 @@ class FlowMAML(Reptile):
         for batch in _mini_batches(train, inner_batch_size, inner_iters - 1, replacement):
             yield batch
         yield tail
+
+def _simple_solve(matmul, b, iters, return_iter_results=False):
+
+    x = b
+
+    if return_iter_results:
+        iter_results = [x]
+
+    for index in range(iters):
+
+        matmul_x = matmul(x, last=(index == iters - 1))
+        diff = subtract_vars(b, matmul_x)
+        x = add_vars(x, diff)
+
+        if return_iter_results:
+            iter_results.append(x)
+
+    if return_iter_results:
+        return iter_results
+
+    return x
+
+def _cg_solve(matmul, b, iters, return_iter_results=False):
+
+    x = b
+    r = subtract_vars(b, matmul(x))
+
+    p = r
+    r_dot = np.sum([(z**2).sum() for z in r])
+
+    if return_iter_results:
+        iter_results = [x]
+
+    for index in range(iters):
+
+        matmul_p = matmul(p, last=(index == iters - 1))
+
+        p_dot = np.sum([(y*z).sum() for y, z in zip(p, matmul_p)])
+
+        alpha = r_dot/p_dot
+        x = add_vars(x, scale_vars(p, alpha))
+
+        if return_iter_results:
+            iter_results.append(x)
+
+        r = subtract_vars(r, scale_vars(matmul_p, alpha))
+
+        new_r_dot = np.sum([(z**2).sum() for z in r])
+        beta = new_r_dot/r_dot
+        r_dot = new_r_dot
+
+        p = add_vars(r, scale_vars(p, beta))
+
+    if return_iter_results:
+        return iter_results
+
+    return x
+
+def _bicgstab_solve(matmul, b, iters, return_iter_results=False):
+
+    pass
+
+def _power_method(hess_prod_arg_phs, session, hess_prod, input_ph, label_ph, inputs, labels,
+        iters=20):
+
+    vector = [np.random.randn(*x.shape) for x in hess_prod_arg_phs]
+
+    for _ in range(iters):
+
+        old_vector = vector
+        vector = session.run(hess_prod, feed_dict={x:y for x, y in \
+            zip([input_ph, label_ph] + hess_prod_arg_phs, [inputs, labels] + \
+            vector)})
+
+        eigenvalue = np.sum([(x*y).sum() for x, y in zip(old_vector, vector)])
+
+        norm = np.sqrt(np.sum([(x**2).sum() for x in vector]))
+        vector = scale_vars(vector, 1/norm)
+
+    return np.abs(eigenvalue)
 
 
 class FOML(Reptile):

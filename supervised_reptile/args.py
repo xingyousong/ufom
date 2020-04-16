@@ -7,7 +7,7 @@ from functools import partial
 
 import tensorflow.compat.v1 as tf
 
-from .reptile import Reptile, FOML, FlowMAML
+from .reptile import Reptile, FOML, MAML
 
 def argument_parser():
     """
@@ -37,12 +37,13 @@ def argument_parser():
     parser.add_argument('--weight-decay', help='weight decay rate', default=1, type=float)
     parser.add_argument('--transductive', help='evaluate all samples at once', action='store_true')
     #parser.add_argument('--foml', help='use FOML instead of Reptile', action='store_true')
-    parser.add_argument('--mode', help='Reptile, FOML, FlowMAML, MAML, MAML_w_errors',
+    parser.add_argument('--mode', help='Reptile, FOML, LightMAML, MAML, MAML_w_errors',
         default='Reptile', type=str)
     parser.add_argument('--nonlin', help='relu, softplus', default='relu', type=str)
     parser.add_argument('--temp', help='', default=1.0, type=float)
     parser.add_argument('--nobatchnorm', help='', action='store_true')
-    parser.add_argument('--precond', help='', action='store_true')
+    parser.add_argument('--lightmaml_inner_iters', help='', default=2, type=int)
+    parser.add_argument('--lightmaml_outer_iters', help='', default=3, type=int)
     parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
                         default=None, type=int)
     parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
@@ -54,8 +55,7 @@ def model_kwargs(parsed_args):
     parsed command-line arguments.
     """
     res = {'learning_rate': parsed_args.learning_rate, 'nonlin': parsed_args.nonlin,
-        'nobatchnorm': parsed_args.nobatchnorm, 'temp': parsed_args.temp,
-        'precond': parsed_args.precond}
+        'nobatchnorm': parsed_args.nobatchnorm, 'temp': parsed_args.temp}
 
     if parsed_args.sgd:
         res['optimizer'] = tf.train.GradientDescentOptimizer
@@ -83,7 +83,7 @@ def train_kwargs(parsed_args):
         'eval_interval': parsed_args.eval_interval,
         'weight_decay_rate': parsed_args.weight_decay,
         'transductive': parsed_args.transductive,
-        'reptile_fn': _args_reptile(parsed_args)
+        'reptile_fn': _args_reptile(parsed_args),
     }
 
 def evaluate_kwargs(parsed_args):
@@ -108,17 +108,10 @@ def _args_reptile(parsed_args):
     if parsed_args.mode == 'FOML':
         return partial(FOML, tail_shots=parsed_args.foml_tail)
 
-    if parsed_args.mode == 'FlowMAML':
-        return partial(FlowMAML, tail_shots=parsed_args.foml_tail, on_exact_grads=False,
-            with_errors=False)
-
-    if parsed_args.mode == 'MAML':
-        return partial(FlowMAML, tail_shots=parsed_args.foml_tail, on_exact_grads=True,
-            with_errors=False)
-
-    if parsed_args.mode == 'MAML_w_errors':
-        return partial(FlowMAML, tail_shots=parsed_args.foml_tail, on_exact_grads=True,
-            with_errors=True)
+    if parsed_args.mode in ['MAML', 'MAML_w_errors', 'LightMAML']:
+        return partial(MAML, tail_shots=parsed_args.foml_tail, mode=parsed_args.mode,
+            lightmaml_inner_iters=parsed_args.lightmaml_inner_iters,
+            lightmaml_outer_iters=parsed_args.lightmaml_outer_iters)
 
     if parsed_args.mode == 'Reptile':
         return Reptile

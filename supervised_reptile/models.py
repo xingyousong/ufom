@@ -24,12 +24,7 @@ class OmniglotModel:
             out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
 
             if not optim_kwargs['nobatchnorm']:
- 
-                if optim_kwargs['precond']:
-                    out -= tf.math.reduce_mean(out, axis=(0, 1, 2), keepdims=True)
-                    out = precond_grads(out)
-
-                out = tf.layers.batch_normalization(out, scale=False, training=True)
+                out = tf.layers.batch_normalization(out, training=True)
 
             if optim_kwargs['nonlin'] == 'softplus':
                 out = tf.math.softplus(out*optim_kwargs['temp'])/optim_kwargs['temp']
@@ -63,12 +58,7 @@ class MiniImageNetModel:
             out = tf.layers.conv2d(out, 32, 3, padding='same')
 
             if not optim_kwargs['nobatchnorm']:
-
-                if optim_kwargs['precond']:
-                    out -= tf.math.reduce_mean(out, axis=(0, 1, 2), keepdims=True)
-                    out = precond_grads(out)
-
-                out = tf.layers.batch_normalization(out, scale=False, training=True)
+                out = tf.layers.batch_normalization(out, training=True)
 
             out = tf.layers.max_pooling2d(out, 2, 2, padding='same')
 
@@ -90,7 +80,6 @@ class MiniImageNetModel:
 
         self.minimize_op = optimizer_instance.apply_gradients(self.gvs)
         self.optimizer = optimizer_instance
-
 
 @tf.custom_gradient
 def precond_grads(x):

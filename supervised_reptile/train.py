@@ -48,9 +48,13 @@ def train(sess,
     tf.summary.scalar('accuracy', accuracy_ph)
     merged = tf.summary.merge_all()
 
-    grad_error_phs = [tf.placeholder(tf.float32, shape=()) for _ in range(3)]
-    grad_error_summaries = [tf.summary.scalar(y, x) for x, y in zip(grad_error_phs,
-        ['foml_grad_error', 'reptile_grad_error', 'flowmaml_grad_error'])]
+    if reptile.__class__.__name__ == 'MAML' and reptile.mode == 'MAML_w_errors':
+        grad_error_phs = [tf.placeholder(tf.float32, shape=()) for _ in \
+            range(reptile.lightmaml_outer_iters + 1)]
+        grad_error_summaries = [tf.summary.scalar('grad error iter={}'.format(i), x) for i, x in \
+            enumerate(grad_error_phs)]
+        singvalue_ph = tf.placeholder(tf.float32, shape=())
+        singvalue_summary = tf.summary.scalar('sing value', singvalue_ph)
 
     train_writer = tf.summary.FileWriter(os.path.join(save_dir, 'train'), sess.graph)
     test_writer = tf.summary.FileWriter(os.path.join(save_dir, 'test'), sess.graph)
@@ -83,9 +87,15 @@ def train(sess,
 
             if result is not None:
 
-                log_fn('foml error - {0}, reptile error - {1}, flowmaml error - {2}'.format(*result))
-                summaries = sess.run(grad_error_summaries, feed_dict=dict(zip(grad_error_phs,
-                    result)))
+                singvalue, errors = result
+
+                log_fn('Errors:', errors, 'sing value', singvalue)
+
+                summary = sess.run(singvalue_summary, feed_dict={singvalue_ph: singvalue})
+                train_writer.add_summary(summary, i)
+
+                summaries = sess.run(grad_error_summaries, feed_dict={x: y for x, y in \
+                    zip(grad_error_phs, errors)})
 
                 for summary in summaries:
                     train_writer.add_summary(summary, i)
