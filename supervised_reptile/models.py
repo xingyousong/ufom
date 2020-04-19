@@ -20,16 +20,9 @@ class OmniglotModel:
         out = tf.reshape(self.input_ph, (-1, 28, 28, 1))
 
         for index in range(4):
-
             out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
-
-            if not optim_kwargs['nobatchnorm']:
-                out = tf.layers.batch_normalization(out, training=True)
-
-            if optim_kwargs['nonlin'] == 'softplus':
-                out = tf.math.softplus(out*optim_kwargs['temp'])/optim_kwargs['temp']
-            else:
-                out = tf.nn.relu(out)
+            out = tf.layers.batch_normalization(out, training=True)
+            out = tf.nn.relu(out)
 
         out = tf.reshape(out, (-1, int(np.prod(out.get_shape()[1:]))))
         self.logits = tf.layers.dense(out, num_classes)
@@ -53,19 +46,12 @@ class MiniImageNetModel:
     def __init__(self, num_classes, optimizer=DEFAULT_OPTIMIZER, **optim_kwargs):
         self.input_ph = tf.placeholder(tf.float32, shape=(None, 84, 84, 3))
         out = self.input_ph
+
         for index in range(4):
-
             out = tf.layers.conv2d(out, 32, 3, padding='same')
-
-            if not optim_kwargs['nobatchnorm']:
-                out = tf.layers.batch_normalization(out, training=True)
-
+            out = tf.layers.batch_normalization(out, training=True)
             out = tf.layers.max_pooling2d(out, 2, 2, padding='same')
-
-            if optim_kwargs['nonlin'] == 'softplus':
-                out = tf.math.softplus(out*optim_kwargs['temp'])/optim_kwargs['temp']
-            else:
-                out = tf.nn.relu(out)
+            out = tf.nn.relu(out)
 
         out = tf.reshape(out, (-1, int(np.prod(out.get_shape()[1:]))))
         self.logits = tf.layers.dense(out, num_classes)
@@ -80,17 +66,6 @@ class MiniImageNetModel:
 
         self.minimize_op = optimizer_instance.apply_gradients(self.gvs)
         self.optimizer = optimizer_instance
-
-@tf.custom_gradient
-def precond_grads(x):
-
-    def grad(dy):
-
-        std_values = tf.math.reduce_std(x, axis=(0, 1, 2), keepdims=True)
-
-        return dy*tf.reduce_min(std_values)
-
-    return x, grad
 
 def get_cross_entropy(logits, labels, num_classes):
 

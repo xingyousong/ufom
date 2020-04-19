@@ -3,6 +3,7 @@ Train a model on miniImageNet.
 """
 
 import random
+import numpy as np
 
 import tensorflow as tf
 
@@ -20,6 +21,8 @@ def main():
     """
     args = argument_parser().parse_args()
     random.seed(args.seed)
+    np.random.seed(args.seed)
+    tf.set_random_seed(args.seed)
 
     train_set, val_set, test_set = read_dataset(DATA_DIR)
     model = MiniImageNetModel(args.classes, **model_kwargs(args))

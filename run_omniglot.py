@@ -3,6 +3,7 @@ Train a model on Omniglot.
 """
 
 import random
+import numpy as np
 
 import tensorflow as tf
 
@@ -20,6 +21,8 @@ def main():
     """
     args = argument_parser().parse_args()
     random.seed(args.seed)
+    np.random.seed(args.seed)
+    tf.set_random_seed(args.seed)
 
     train_set, test_set = split_dataset(read_dataset(DATA_DIR))
     train_set = list(augment_dataset(train_set))

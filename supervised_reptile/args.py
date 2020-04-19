@@ -36,17 +36,13 @@ def argument_parser():
     parser.add_argument('--eval-interval', help='train steps per eval', default=10, type=int)
     parser.add_argument('--weight-decay', help='weight decay rate', default=1, type=float)
     parser.add_argument('--transductive', help='evaluate all samples at once', action='store_true')
-    #parser.add_argument('--foml', help='use FOML instead of Reptile', action='store_true')
-    parser.add_argument('--mode', help='Reptile, FOML, LightMAML, MAML, MAML_w_errors',
-        default='Reptile', type=str)
-    parser.add_argument('--nonlin', help='relu, softplus', default='relu', type=str)
-    parser.add_argument('--temp', help='', default=1.0, type=float)
-    parser.add_argument('--nobatchnorm', help='', action='store_true')
-    parser.add_argument('--lightmaml_inner_iters', help='', default=2, type=int)
-    parser.add_argument('--lightmaml_outer_iters', help='', default=3, type=int)
-    parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
-                        default=None, type=int)
-    parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
+    parser.add_argument('--mode', help='Reptile, FOML, MAML, EReptile', default='Reptile', type=str)
+    parser.add_argument('--mc_iters', help='', default=0, type=int)
+    parser.add_argument('--compute_errors', help='', action='store_true')
+    parser.add_argument('--hess_sum_approx', help='', action='store_true')
+    #parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
+    #                    default=None, type=int)
+    #parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
     return parser
 
 def model_kwargs(parsed_args):
@@ -54,10 +50,11 @@ def model_kwargs(parsed_args):
     Build the kwargs for model constructors from the
     parsed command-line arguments.
     """
-    res = {'learning_rate': parsed_args.learning_rate, 'nonlin': parsed_args.nonlin,
-        'nobatchnorm': parsed_args.nobatchnorm, 'temp': parsed_args.temp}
+    res = {'learning_rate': parsed_args.learning_rate}
 
-    if parsed_args.sgd:
+    #if parsed_args.sgd:
+
+    if parsed_args.mode != 'Reptile':
         res['optimizer'] = tf.train.GradientDescentOptimizer
 
     return res
@@ -105,15 +102,14 @@ def evaluate_kwargs(parsed_args):
 
 def _args_reptile(parsed_args):
 
-    if parsed_args.mode == 'FOML':
-        return partial(FOML, tail_shots=parsed_args.foml_tail)
+    if parsed_args.mode == 'FOML' and parsed_args.mc_iters == 0 and \
+            (not parsed_args.compute_errors) and (not parsed_args.hess_sum_approx):
 
-    if parsed_args.mode in ['MAML', 'MAML_w_errors', 'LightMAML']:
-        return partial(MAML, tail_shots=parsed_args.foml_tail, mode=parsed_args.mode,
-            lightmaml_inner_iters=parsed_args.lightmaml_inner_iters,
-            lightmaml_outer_iters=parsed_args.lightmaml_outer_iters)
+        return partial(FOML, tail_shots=True)
 
-    if parsed_args.mode == 'Reptile':
+    if parsed_args.mode == 'Reptile' and parsed_args.mc_iters == 0 and \
+            (not parsed_args.compute_errors) and (not parsed_args.hess_sum_approx):
         return Reptile
 
-    return None
+    return partial(MAML, tail_shots=True, mode=parsed_args.mode, mc_iters=parsed_args.mc_iters, \
+        compute_errors=parsed_args.compute_errors, hess_sum_approx=parsed_args.hess_sum_approx)
