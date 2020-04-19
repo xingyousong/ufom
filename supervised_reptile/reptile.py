@@ -322,8 +322,7 @@ class MAML(Reptile):
 
             if self.mode in ['MAML', 'EReptile']:
                 update = self._get_exact_batch_updates(input_ph, label_ph, minimize_op,
-                    self._model_state.export_variables(), last_update, mini_dataset,
-                    index_mini_batches, var_states)
+                    last_update, mini_dataset, index_mini_batches, var_states)
             elif self.mode == 'FOML':
                 update = last_update
             elif self.mode == 'Reptile':
