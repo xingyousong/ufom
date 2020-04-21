@@ -51,6 +51,8 @@ def train(sess,
     if reptile.__class__.__name__ == 'MAML' and reptile.compute_errors:
         error_ph = tf.placeholder(tf.float32, shape=())
         error_summary = tf.summary.scalar('error', error_ph)
+        variance_ph = tf.placeholder(tf.float32, shape=())
+        variance_summary = tf.summary.scalar('error', variance_ph)
 
     train_writer = tf.summary.FileWriter(os.path.join(save_dir, 'train'), sess.graph)
     test_writer = tf.summary.FileWriter(os.path.join(save_dir, 'test'), sess.graph)
@@ -83,9 +85,11 @@ def train(sess,
 
             if result is not None:
 
-                log_fn('Error:', result)
+                log_fn('Error:', result[0], 'variance:', result[1])
 
-                summary = sess.run(error_summary, feed_dict={error_ph: result})
+                summary = sess.run(error_summary, feed_dict={error_ph: result[0]})
+                train_writer.add_summary(summary, i)
+                summary = sess.run(variance_summary, feed_dict={variance_ph: result[1]})
                 train_writer.add_summary(summary, i)
 
             train_writer.flush()

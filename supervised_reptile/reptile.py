@@ -65,7 +65,10 @@ class Reptile:
         new_vars = []
         for _ in range(meta_batch_size):
             mini_dataset = _sample_mini_dataset(dataset, num_classes, num_shots)
+            mini_dataset = list(mini_dataset)
+            print('MINI DATASET', len(mini_dataset))
             for batch in _mini_batches(mini_dataset, inner_batch_size, inner_iters, replacement):
+                print('BATCH', len(batch))
                 inputs, labels = zip(*batch)
                 if self._pre_step_op:
                     self.session.run(self._pre_step_op)
@@ -144,7 +147,7 @@ class MAML(Reptile):
     '''
 
     def __init__(self, session, mode=None, model=None, tail_shots=None, variables=None,
-            transductive=False, pre_step_op=None, mc_iters=None, compute_errors=None,
+            transductive=False, pre_step_op=None, unbiased=None, compute_errors=None,
             hess_sum_approx=None):
 
         self.session = session
@@ -160,7 +163,7 @@ class MAML(Reptile):
         self._pre_step_op = pre_step_op
 
         self.mode = mode
-        self.mc_iters = mc_iters
+        self.unbiased = unbiased
         self.compute_errors = compute_errors
         self.hess_sum_approx = hess_sum_approx
 
@@ -205,10 +208,11 @@ class MAML(Reptile):
         for meta_batch_index in range(meta_batch_size):
 
             mini_dataset = list(_sample_mini_dataset(dataset, num_classes, num_shots))
+
             index_dataset = [(i, x[1]) for i, x in enumerate(mini_dataset)]
 
-            index_mini_batches = [x[0] for x in self._mini_batches(index_dataset, inner_batch_size,
-                inner_iters, replacement)]
+            index_mini_batches = list(self._mini_batches(index_dataset, inner_batch_size,
+                inner_iters, replacement))
 
             last_update = None
 
@@ -220,9 +224,9 @@ class MAML(Reptile):
 
                     if batch_index == inner_iters - 1:
                         var_backup = self._model_state.export_variables()
-
-                    batch = [mini_dataset[i] for i in index_batch]
-                    inputs, labels = zip(*batch)
+ 
+                    inputs = [mini_dataset[x[0]][0] for x in index_batch]
+                    labels = [x[1] for x in index_batch]
 
                     if self._pre_step_op:
                         self.session.run(self._pre_step_op)
@@ -238,87 +242,60 @@ class MAML(Reptile):
             if store_vals:
                 var_states = [init_vars]
 
-            if self.mc_iters > 0:
-                mc_term = [np.zeros_like(x) for x in init_vars]
-                repeat_iters = self.mc_iters
-            else:
-                repeat_iters = 1
+            self._model_state.import_variables(init_vars)
 
-            for iter_index in range(repeat_iters):
+            if self.unbiased:
 
-                self._model_state.import_variables(init_vars)
+                random_vector = [np.random.randn(*x.shape) for x in init_vars]
+                aggr_vector = random_vector
 
-                if self.mc_iters > 0:
+                if self.hess_sum_approx:
+                    hess_sum_mc_term = [np.zeros_like(x) for x in init_vars]
 
-                    random_vector = [np.random.randn(*x.shape) for x in init_vars]
-                    total_size = np.sum([x.size for x in random_vector])
-                    random_vector = scale_vars(random_vector,
-                        np.sqrt(total_size)/_norm(random_vector))
-                    aggr_vector = random_vector
+            for batch_index, index_batch in enumerate(index_mini_batches):
+
+                if batch_index == inner_iters - 1:
+                    var_backup = self._model_state.export_variables()
+
+                inputs = [mini_dataset[x[0]][0] for x in index_batch]
+                labels = [x[1] for x in index_batch]
+
+                if self._pre_step_op:
+                    self.session.run(self._pre_step_op)
+
+                if self.hess_sum_approx and batch_index < inner_iters - 1:
+
+                    hess_prod = self.session.run(self._hess_prod, feed_dict={x:y for x, y in \
+                        zip([input_ph, label_ph] + self._hess_prod_arg_phs, [inputs, labels] + \
+                        hess_sum_last_update)})
+
+                    hess_sum_term = add_vars(hess_sum_term, hess_prod)
+
+                if self.unbiased and batch_index < inner_iters - 1:
 
                     if self.hess_sum_approx:
-                        hess_sum_mc_term = [np.zeros_like(x) for x in init_vars]
 
-                for batch_index, index_batch in enumerate(index_mini_batches):
-
-                    if batch_index == inner_iters - 1:
-                        var_backup = self._model_state.export_variables()
-
-                    batch = [mini_dataset[i] for i in index_batch]
-                    inputs, labels = zip(*batch)
-
-                    if self._pre_step_op:
-                        self.session.run(self._pre_step_op)
-
-                    if self.hess_sum_approx and iter_index == 0 and batch_index < inner_iters - 1:
-
-                        hess_prod = self.session.run(self._hess_prod, feed_dict={x:y for x, y in \
-                            zip([input_ph, label_ph] + self._hess_prod_arg_phs, [inputs, labels] + \
-                            hess_sum_last_update)})
-
-                        hess_sum_term = add_vars(hess_sum_term, hess_prod)
-
-                    if self.mc_iters > 0:
-
-                        if self.hess_sum_approx:
-
-                            hess_prod = self.session.run(self._hess_prod,
-                                feed_dict={x:y for x, y in zip([input_ph, label_ph] + \
-                                self._hess_prod_arg_phs, [inputs, labels] + random_vector)})
-
-                            hess_sum_mc_term = add_vars(hess_sum_mc_term, hess_prod)
-
-                        hess_prod, _ = self.session.run([self._hess_prod, minimize_op],
+                        hess_prod = self.session.run(self._hess_prod,
                             feed_dict={x:y for x, y in zip([input_ph, label_ph] + \
-                            self._hess_prod_arg_phs, [inputs, labels] + aggr_vector)})
+                            self._hess_prod_arg_phs, [inputs, labels] + random_vector)})
 
-                        hess_prod = scale_vars(hess_prod, self._learning_rate)
-                        aggr_vector = subtract_vars(aggr_vector, hess_prod)
+                        hess_sum_mc_term = add_vars(hess_sum_mc_term, hess_prod)
 
-                    else:
-                        self.session.run(minimize_op, feed_dict={input_ph: inputs,
-                            label_ph: labels})
+                    hess_prod = self.session.run(self._hess_prod,
+                        feed_dict={x:y for x, y in zip([input_ph, label_ph] + \
+                        self._hess_prod_arg_phs, [inputs, labels] + aggr_vector)})
 
-                    if iter_index == 0:
+                    hess_prod = scale_vars(hess_prod, self._learning_rate)
+                    aggr_vector = subtract_vars(aggr_vector, hess_prod)
 
-                        if batch_index == inner_iters - 1:
-                            last_update = subtract_vars(self._model_state.export_variables(),
-                                var_backup)
-                        elif store_vals:
-                            var_states.append(self._model_state.export_variables())
+                self.session.run(minimize_op, feed_dict={input_ph: inputs,
+                    label_ph: labels})
 
-                if self.mc_iters > 0:
-
-                    aggr_vector = subtract_vars(aggr_vector, random_vector)
-
-                    if self.hess_sum_approx:
-                        aggr_vector = add_vars(aggr_vector, scale_vars(hess_sum_mc_term,
-                            self._learning_rate))
-
-                    dot_product = _dot_product(aggr_vector, last_update)
-
-                    cur_mc_term = scale_vars(last_update, dot_product)
-                    mc_term = add_vars(mc_term, cur_mc_term)
+                if batch_index == inner_iters - 1:
+                    last_update = subtract_vars(self._model_state.export_variables(),
+                        var_backup)
+                elif store_vals:
+                    var_states.append(self._model_state.export_variables())
 
             if self.mode in ['MAML', 'EReptile']:
                 update = self._get_exact_batch_updates(input_ph, label_ph, minimize_op,
@@ -328,22 +305,28 @@ class MAML(Reptile):
             elif self.mode == 'Reptile':
                 pass
 
-            if self.mc_iters > 0:
+            if self.unbiased:
 
-                mc_term = scale_vars(mc_term, 1/self.mc_iters)
+                aggr_vector = subtract_vars(aggr_vector, random_vector)
 
-                update = add_vars(update, mc_term)
+                if self.hess_sum_approx:
+                    aggr_vector = add_vars(aggr_vector, scale_vars(hess_sum_mc_term,
+                        self._learning_rate))
+
+                dot_product = _dot_product(aggr_vector, last_update)
+                debiasing_term = scale_vars(random_vector, dot_product)
+                update = add_vars(update, debiasing_term)
 
             if self.hess_sum_approx:
-                update = subtract_vars(update, scale_vars(hess_sum_term, self._learning_rate))
+                hess_sum_term = scale_vars(hess_sum_term, -self._learning_rate)
+                update = add_vars(update, hess_sum_term)
 
             updates.append(update)
 
             if self.compute_errors:
 
-                exact_update = self._get_exact_batch_updates(input_ph, label_ph, minimize_op,
+                exact_update = self._get_exact_batch_updates(input_ph, label_ph,
                     last_update, mini_dataset, index_mini_batches, var_states)
-
                 exact_updates.append(exact_update)
 
         update = average_vars(updates)
@@ -358,19 +341,22 @@ class MAML(Reptile):
             diff = subtract_vars(exact_update, update)
             error = _norm(diff)/_norm(exact_update)
 
-            return error
+            variance = np.mean([_norm(subtract_vars(x, y))**2 for x, y in zip(updates,
+                exact_updates)])
+
+            return error, variance
 
         self._model_state.import_variables(add_vars(init_vars, scale_vars(update, meta_step_size)))
 
         return None
 
-    def _get_exact_batch_updates(self, input_ph, label_ph, minimize_op, batch_update,
-            mini_dataset, index_mini_batches, var_states):
+    def _get_exact_batch_updates(self, input_ph, label_ph, batch_update, mini_dataset,
+            index_mini_batches, var_states):
 
         for batch_index, index_batch in enumerate(index_mini_batches[-2::-1]):
-
-            batch = [mini_dataset[i] for i in index_batch]
-            inputs, labels = zip(*batch)
+ 
+            inputs = [mini_dataset[x[0]][0] for x in index_batch]
+            labels = [x[1] for x in index_batch]
 
             cur_vars = var_states[len(var_states) - 2 - batch_index]
 
@@ -477,9 +463,12 @@ class FOML(Reptile):
         updates = []
         for _ in range(meta_batch_size):
             mini_dataset = _sample_mini_dataset(dataset, num_classes, num_shots)
+            mini_dataset = list(mini_dataset)
+            print('MINI DATASET', len(mini_dataset))
             mini_batches = self._mini_batches(mini_dataset, inner_batch_size, inner_iters,
                                               replacement)
             for batch in mini_batches:
+                print('BATCH', len(batch))
                 inputs, labels = zip(*batch)
                 last_backup = self._model_state.export_variables()
                 if self._pre_step_op:

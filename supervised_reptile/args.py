@@ -37,7 +37,7 @@ def argument_parser():
     parser.add_argument('--weight-decay', help='weight decay rate', default=1, type=float)
     parser.add_argument('--transductive', help='evaluate all samples at once', action='store_true')
     parser.add_argument('--mode', help='Reptile, FOML, MAML, EReptile', default='Reptile', type=str)
-    parser.add_argument('--mc_iters', help='', default=0, type=int)
+    parser.add_argument('--unbiased', help='', action='store_true')
     parser.add_argument('--compute_errors', help='', action='store_true')
     parser.add_argument('--hess_sum_approx', help='', action='store_true')
     #parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
@@ -102,14 +102,14 @@ def evaluate_kwargs(parsed_args):
 
 def _args_reptile(parsed_args):
 
-    if parsed_args.mode == 'FOML' and parsed_args.mc_iters == 0 and \
+    if parsed_args.mode == 'FOML' and (not parsed_args.unbiased) and \
             (not parsed_args.compute_errors) and (not parsed_args.hess_sum_approx):
 
-        return partial(FOML, tail_shots=True)
+        return partial(FOML, tail_shots=1)
 
-    if parsed_args.mode == 'Reptile' and parsed_args.mc_iters == 0 and \
+    if parsed_args.mode == 'Reptile' and (not parsed_args.unbiased) and \
             (not parsed_args.compute_errors) and (not parsed_args.hess_sum_approx):
         return Reptile
 
-    return partial(MAML, tail_shots=True, mode=parsed_args.mode, mc_iters=parsed_args.mc_iters, \
+    return partial(MAML, tail_shots=1, mode=parsed_args.mode, unbiased=parsed_args.unbiased, \
         compute_errors=parsed_args.compute_errors, hess_sum_approx=parsed_args.hess_sum_approx)
