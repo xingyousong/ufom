@@ -41,18 +41,12 @@ def train(sess,
         os.mkdir(save_dir)
     saver = tf.train.Saver()
     reptile = reptile_fn(sess,
+                         model=model,
                          transductive=transductive,
-                         pre_step_op=weight_decay(weight_decay_rate),
-                         model=model)
+                         pre_step_op=weight_decay(weight_decay_rate))
     accuracy_ph = tf.placeholder(tf.float32, shape=())
     tf.summary.scalar('accuracy', accuracy_ph)
     merged = tf.summary.merge_all()
-
-    if reptile.__class__.__name__ == 'MAML' and reptile.compute_errors:
-        error_ph = tf.placeholder(tf.float32, shape=())
-        error_summary = tf.summary.scalar('error', error_ph)
-        variance_ph = tf.placeholder(tf.float32, shape=())
-        variance_summary = tf.summary.scalar('error', variance_ph)
 
     train_writer = tf.summary.FileWriter(os.path.join(save_dir, 'train'), sess.graph)
     test_writer = tf.summary.FileWriter(os.path.join(save_dir, 'test'), sess.graph)
@@ -64,11 +58,11 @@ def train(sess,
 
         on_eval_iter = (i%eval_interval == 0)
 
-        result = reptile.train_step(train_set, model.input_ph, model.label_ph, model.minimize_op,
+        reptile.train_step(train_set, model.input_ph, model.label_ph, model.minimize_op,
                 num_classes=num_classes, num_shots=(train_shots or num_shots),
                 inner_batch_size=inner_batch_size, inner_iters=inner_iters,
                 replacement=replacement, meta_step_size=cur_meta_step_size,
-                meta_batch_size=meta_batch_size, on_eval_iter=on_eval_iter)
+                meta_batch_size=meta_batch_size)
 
         if on_eval_iter:
             accuracies = []
@@ -80,20 +74,9 @@ def train(sess,
                                            inner_iters=eval_inner_iters, replacement=replacement)
                 summary = sess.run(merged, feed_dict={accuracy_ph: correct/num_classes})
                 writer.add_summary(summary, i) 
+                writer.flush()
                 accuracies.append(correct / num_classes)
             log_fn('batch %d: train=%f test=%f' % (i, accuracies[0], accuracies[1]))
-
-            if result is not None:
-
-                log_fn('Error:', result[0], 'variance:', result[1])
-
-                summary = sess.run(error_summary, feed_dict={error_ph: result[0]})
-                train_writer.add_summary(summary, i)
-                summary = sess.run(variance_summary, feed_dict={variance_ph: result[1]})
-                train_writer.add_summary(summary, i)
-
-            train_writer.flush()
-            test_writer.flush()
 
         if i % 100 == 0 or i == meta_iters-1:
             saver.save(sess, os.path.join(save_dir, 'model.ckpt'), global_step=i)

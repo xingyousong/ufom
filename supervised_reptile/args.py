@@ -7,7 +7,7 @@ from functools import partial
 
 import tensorflow.compat.v1 as tf
 
-from .reptile import Reptile, FOML, MAML
+from .reptile import Reptile, FOML, GReptile
 
 def argument_parser():
     """
@@ -36,13 +36,15 @@ def argument_parser():
     parser.add_argument('--eval-interval', help='train steps per eval', default=10, type=int)
     parser.add_argument('--weight-decay', help='weight decay rate', default=1, type=float)
     parser.add_argument('--transductive', help='evaluate all samples at once', action='store_true')
-    parser.add_argument('--mode', help='Reptile, FOML, MAML, EReptile', default='Reptile', type=str)
-    parser.add_argument('--unbiased', help='', action='store_true')
-    parser.add_argument('--compute_errors', help='', action='store_true')
-    parser.add_argument('--hess_sum_approx', help='', action='store_true')
+    parser.add_argument('--mode', help='Reptile, FOML, GReptile', default='Reptile', type=str)
+    parser.add_argument('--repeat_one_batch', help='', action='store_true')
+    parser.add_argument('--nas', help='', action='store_true')
+    parser.add_argument('--hidden_size', help='', default=10000, type=int)
+    parser.add_argument('--bin_size', help='', default=500, type=int)
+    parser.add_argument('--emb_size', help='', default=64)
     #parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
     #                    default=None, type=int)
-    #parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
+    parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
     return parser
 
 def model_kwargs(parsed_args):
@@ -52,9 +54,7 @@ def model_kwargs(parsed_args):
     """
     res = {'learning_rate': parsed_args.learning_rate}
 
-    #if parsed_args.sgd:
-
-    if parsed_args.mode != 'Reptile':
+    if parsed_args.sgd:
         res['optimizer'] = tf.train.GradientDescentOptimizer
 
     return res
@@ -102,14 +102,13 @@ def evaluate_kwargs(parsed_args):
 
 def _args_reptile(parsed_args):
 
-    if parsed_args.mode == 'FOML' and (not parsed_args.unbiased) and \
-            (not parsed_args.compute_errors) and (not parsed_args.hess_sum_approx):
-
-        return partial(FOML, tail_shots=1)
-
-    if parsed_args.mode == 'Reptile' and (not parsed_args.unbiased) and \
-            (not parsed_args.compute_errors) and (not parsed_args.hess_sum_approx):
+    if parsed_args.mode == 'Reptile':
         return Reptile
 
-    return partial(MAML, tail_shots=1, mode=parsed_args.mode, unbiased=parsed_args.unbiased, \
-        compute_errors=parsed_args.compute_errors, hess_sum_approx=parsed_args.hess_sum_approx)
+    if parsed_args.mode == 'FOML':
+        return partial(FOML, tail_shots=1)
+
+    if parsed_args.mode == 'GReptile':
+        return partial(GReptile, repeat_one_batch=parsed_args.repeat_one_batch)
+
+    return None
