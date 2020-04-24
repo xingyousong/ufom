@@ -25,7 +25,7 @@ class Reptile:
         self.session = session
         self._model_state = VariableState(self.session, variables or tf.trainable_variables())
         self._full_state = VariableState(self.session,
-            tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
+                                         tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
         self._transductive = transductive
         self._pre_step_op = pre_step_op
 
@@ -65,7 +65,6 @@ class Reptile:
         new_vars = []
         for _ in range(meta_batch_size):
             mini_dataset = _sample_mini_dataset(dataset, num_classes, num_shots)
-            mini_dataset = list(mini_dataset)
             for batch in _mini_batches(mini_dataset, inner_batch_size, inner_iters, replacement):
                 inputs, labels = zip(*batch)
                 if self._pre_step_op:
@@ -139,6 +138,175 @@ class Reptile:
         return res
 
 
+class UnbMAML(Reptile):
+    '''
+    Not compatible with adaptive optimizers in `minimize_op`.
+    '''
+
+    def __init__(self, session, mode=None, model=None, tail_shots=None, variables=None,
+            transductive=False, pre_step_op=None, exact_prob=None):
+
+        self.session = session
+
+        if variables is None:
+            variables = [y for x, y in model.gvs]
+
+        self._model_state = VariableState(self.session, variables)
+        self._full_state = VariableState(self.session,
+            tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
+
+        self._transductive = transductive
+        self._pre_step_op = pre_step_op
+
+        self.mode = mode
+        self.exact_prob = exact_prob
+
+        self._learning_rate = model.learning_rate
+
+        if mode == 'Reptile':
+            self.tail_shots = None
+        else:
+            self.tail_shots = 1
+
+        loss_grads = [x for x, y in model.gvs]
+
+        self._hess_prod_arg_phs = [tf.placeholder(v.dtype.base_dtype, shape=v.get_shape()) \
+            for v in variables]
+
+        second_grad_loss = tf.add_n([tf.reduce_sum(x*y) for x, y in zip(loss_grads,
+            self._hess_prod_arg_phs) if x is not None])
+
+        self._hess_prod = [x for x, y in model.optimizer.compute_gradients(second_grad_loss,
+            var_list=variables)]
+
+    # pylint: disable=R0913,R0914
+    def train_step(self,
+                   dataset,
+                   input_ph,
+                   label_ph,
+                   minimize_op,
+                   num_classes,
+                   num_shots,
+                   inner_batch_size,
+                   inner_iters,
+                   replacement,
+                   meta_step_size,
+                   meta_batch_size,
+                   on_eval_iter=None):
+
+        updates = []
+
+        init_vars = self._model_state.export_variables()
+
+        for meta_batch_index in range(meta_batch_size):
+
+            on_exact = (np.random.rand() < self.exact_prob)
+
+            if on_exact:
+                var_states = [init_vars]
+
+            mini_dataset = list(_sample_mini_dataset(dataset, num_classes, num_shots))
+            index_dataset = [(i, x[1]) for i, x in enumerate(mini_dataset)]
+
+            index_mini_batches = list(self._mini_batches(index_dataset, inner_batch_size,
+                inner_iters, replacement))
+
+            update = None
+
+            self._model_state.import_variables(init_vars)
+
+            for batch_index, index_batch in enumerate(index_mini_batches):
+
+                if self.mode == 'Reptile' or batch_index == inner_iters - 1:
+                    var_backup = self._model_state.export_variables()
+
+                inputs = [mini_dataset[x[0]][0] for x in index_batch]
+                labels = [x[1] for x in index_batch]
+
+                if self._pre_step_op:
+                    self.session.run(self._pre_step_op)
+
+                self.session.run(minimize_op, feed_dict={input_ph: inputs,
+                    label_ph: labels})
+
+                if self.mode == 'Reptile':
+
+                    change = subtract_vars(self._model_state.export_variables(),
+                        var_backup)
+
+                    if batch_index == 0:
+                        update = change
+                    else:
+                        update = add_vars(update, change)
+
+                elif batch_index == inner_iters - 1:
+                    update = subtract_vars(self._model_state.export_variables(),
+                        var_backup)
+
+                if on_exact:
+                    var_states.append(self._model_state.export_variables())
+
+            if on_exact:
+
+                exact_update = self._get_exact_update(input_ph, label_ph, mini_dataset,
+                    index_mini_batches, var_states)
+
+                update = add_vars(update, scale_vars(subtract_vars(exact_update, update),
+                    1/self.exact_prob))
+
+            updates.append(update)
+
+        update = average_vars(updates)
+
+        self._model_state.import_variables(add_vars(init_vars, scale_vars(update, meta_step_size)))
+
+        return None
+
+    def _get_exact_update(self, input_ph, label_ph, mini_dataset, index_mini_batches, var_states):
+
+        inner_iters = len(index_mini_batches)
+
+        update = subtract_vars(var_states[inner_iters], var_states[inner_iters - 1])
+
+        for batch_index in range(inner_iters - 2, -1, -1):
+
+            index_batch = index_mini_batches[batch_index]
+ 
+            inputs = [mini_dataset[x[0]][0] for x in index_batch]
+            labels = [x[1] for x in index_batch]
+
+            self._model_state.import_variables(var_states[batch_index])
+
+            if self._pre_step_op:
+                self.session.run(self._pre_step_op)
+
+            hess_prod = self.session.run(self._hess_prod, feed_dict={x:y for x, y in \
+                zip([input_ph, label_ph] + self._hess_prod_arg_phs, [inputs, labels] + \
+                update)})
+
+            hess_prod = scale_vars(hess_prod, self._learning_rate)
+            update = subtract_vars(update, hess_prod)
+
+            if self.mode == 'Reptile':
+                update = add_vars(update, subtract_vars(var_states[batch_index + 1],
+                    var_states[batch_index]))
+
+        return update
+ 
+    def _mini_batches(self, mini_dataset, inner_batch_size, inner_iters, replacement):
+        """
+        Generate inner-loop mini-batches for the task.
+        """
+        if self.tail_shots is None:
+            for value in _mini_batches(mini_dataset, inner_batch_size, inner_iters, replacement):
+                yield value
+            return
+        train, tail = _split_train_test(mini_dataset, test_shots=self.tail_shots)
+        for batch in _mini_batches(train, inner_batch_size, inner_iters - 1, replacement):
+            yield batch
+        yield tail
+
+
 class FOML(Reptile):
     """
     A basic implementation of "first-order MAML" (FOML).
@@ -156,7 +324,7 @@ class FOML(Reptile):
     This final mini-batch is guaranteed not to overlap
     with the training mini-batches.
     """
-    def __init__(self, *args, tail_shots=None, model=None, **kwargs):
+    def __init__(self, *args, tail_shots=None, **kwargs):
         """
         Create a first-order MAML session.
 
@@ -183,30 +351,20 @@ class FOML(Reptile):
                    replacement,
                    meta_step_size,
                    meta_batch_size, on_eval_iter=None):
-
         old_vars = self._model_state.export_variables()
         updates = []
-
         for _ in range(meta_batch_size):
-
             mini_dataset = _sample_mini_dataset(dataset, num_classes, num_shots)
-            mini_dataset = list(mini_dataset)
             mini_batches = self._mini_batches(mini_dataset, inner_batch_size, inner_iters,
                                               replacement)
             for batch in mini_batches:
-
                 inputs, labels = zip(*batch)
-
                 last_backup = self._model_state.export_variables()
-
                 if self._pre_step_op:
                     self.session.run(self._pre_step_op)
-
                 self.session.run(minimize_op, feed_dict={input_ph: inputs, label_ph: labels})
-
             updates.append(subtract_vars(self._model_state.export_variables(), last_backup))
             self._model_state.import_variables(old_vars)
-
         update = average_vars(updates)
         self._model_state.import_variables(add_vars(old_vars, scale_vars(update, meta_step_size)))
 
@@ -224,88 +382,6 @@ class FOML(Reptile):
         for batch in _mini_batches(train, inner_batch_size, inner_iters - 1, replacement):
             yield batch
         yield tail
-
-
-class GReptile(Reptile):
-
-    def __init__(self, *args, repeat_one_batch=None, model=None, **kwargs):
-        """
-        Create a first-order MAML session.
-
-        Args:
-          args: args for Reptile.
-          tail_shots: if specified, this is the number of
-            examples per class to reserve for the final
-            mini-batch.
-          kwargs: kwargs for Reptile.
-        """
-        super(GReptile, self).__init__(*args, **kwargs)
-        self.model = model
-        self.repeat_one_batch = repeat_one_batch
-
-    # pylint: disable=R0913,R0914
-    def train_step(self,
-                   dataset,
-                   input_ph,
-                   label_ph,
-                   minimize_op,
-                   num_classes,
-                   num_shots,
-                   inner_batch_size,
-                   inner_iters,
-                   replacement,
-                   meta_step_size,
-                   meta_batch_size):
-
-        old_vars = self._model_state.export_variables()
-        updates = []
-
-        for _ in range(meta_batch_size):
-
-            if self.repeat_one_batch:
-
-                mini_dataset = _sample_mini_dataset(dataset, num_classes, 2)
-                train_batch, test_batch = _split_train_test(mini_dataset)
-                train_mini_batches = [train_batch]*inner_iters
-                test_mini_batches = [test_batch]*inner_iters
-
-            else:
-
-                mini_dataset = _sample_mini_dataset(dataset, num_classes, num_shots + inner_iters)
-                train_mini_dataset, test_mini_dataset = _split_train_test(mini_dataset)
-                train_mini_batches = _mini_batches(train_mini_dataset, inner_batch_size,
-                    inner_iters, replacement)
-                test_mini_batches = _mini_batches(test_mini_dataset, num_classes, inner_iters,
-                    replacement)
-
-            for train_batch, test_batch in zip(train_mini_batches, test_mini_batches):
-
-                train_inputs, train_labels = zip(*train_batch)
-                test_inputs, test_labels = zip(*test_batch)
-
-                if self._pre_step_op:
-                    self.session.run(self._pre_step_op)
-
-                _, train_loss = self.session.run([minimize_op, self.model.loss],
-                    feed_dict={input_ph: train_inputs, label_ph: train_labels})
- 
-                last_backup = self._model_state.export_variables()
-
-                _, test_loss = self.session.run([minimize_op, self.model.loss],
-                    feed_dict={input_ph: test_inputs, label_ph: test_labels})
-
-                #print('\t', 'train loss', np.mean(train_loss), 'test loss', np.mean(test_loss))
-
-                updates.append(subtract_vars(self._model_state.export_variables(), last_backup))
-
-                self._model_state.import_variables(last_backup)
-
-            #print('')
-
-            self._model_state.import_variables(old_vars)
-
-        update = average_vars(updates)
-        self._model_state.import_variables(add_vars(old_vars, scale_vars(update, meta_step_size)))
 
 def _sample_mini_dataset(dataset, num_classes, num_shots):
     """

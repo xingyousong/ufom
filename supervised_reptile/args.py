@@ -7,7 +7,7 @@ from functools import partial
 
 import tensorflow.compat.v1 as tf
 
-from .reptile import Reptile, FOML, GReptile
+from .reptile import Reptile, FOML, UnbMAML
 
 def argument_parser():
     """
@@ -36,12 +36,8 @@ def argument_parser():
     parser.add_argument('--eval-interval', help='train steps per eval', default=10, type=int)
     parser.add_argument('--weight-decay', help='weight decay rate', default=1, type=float)
     parser.add_argument('--transductive', help='evaluate all samples at once', action='store_true')
-    parser.add_argument('--mode', help='Reptile, FOML, GReptile', default='Reptile', type=str)
-    parser.add_argument('--repeat_one_batch', help='', action='store_true')
-    parser.add_argument('--nas', help='', action='store_true')
-    parser.add_argument('--hidden_size', help='', default=10000, type=int)
-    parser.add_argument('--bin_size', help='', default=500, type=int)
-    parser.add_argument('--emb_size', help='', default=64)
+    parser.add_argument('--mode', help='Reptile, FOML, EReptile, MAML', default='Reptile', type=str)
+    parser.add_argument('--unbiased', help='', action='store_true')
     #parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
     #                    default=None, type=int)
     parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
@@ -102,13 +98,20 @@ def evaluate_kwargs(parsed_args):
 
 def _args_reptile(parsed_args):
 
+    if parsed_args.unbiased:
+        return partial(UnbMAML, exact_prob=1/parsed_args.inner_iters,
+            mode=parsed_args.mode)
+
+    if parsed_args.mode == 'EReptile':
+        return partial(UnbMAML, exact_prob=1, mode='Reptile')
+
+    if parsed_args.mode == 'MAML':
+        return partial(UnbMAML, exact_prob=1, mode='FOML')
+
     if parsed_args.mode == 'Reptile':
         return Reptile
 
     if parsed_args.mode == 'FOML':
         return partial(FOML, tail_shots=1)
-
-    if parsed_args.mode == 'GReptile':
-        return partial(GReptile, repeat_one_batch=parsed_args.repeat_one_batch)
 
     return None

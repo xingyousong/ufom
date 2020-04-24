@@ -10,7 +10,6 @@ import tensorflow as tf
 from supervised_reptile.args import argument_parser, model_kwargs, train_kwargs, evaluate_kwargs
 from supervised_reptile.eval import evaluate
 from supervised_reptile.models import OmniglotModel
-from supervised_reptile.nas import NAS
 from supervised_reptile.omniglot import read_dataset, split_dataset, augment_dataset
 from supervised_reptile.train import train
 
@@ -29,11 +28,7 @@ def main():
     train_set = list(augment_dataset(train_set))
     test_set = list(test_set)
 
-    if args.nas:
-        model = NAS((28, 28), args.hidden_size, args.classes, args.bin_size, args.emb_size,
-            **model_kwargs(args))
-    else:
-        model = OmniglotModel(args.classes, **model_kwargs(args))
+    model = OmniglotModel(args.classes, **model_kwargs(args))
 
     with tf.Session() as sess:
         if not args.pretrained:
