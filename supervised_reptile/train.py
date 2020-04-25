@@ -30,7 +30,7 @@ def train(sess,
           eval_interval=10,
           weight_decay_rate=1,
           time_deadline=None,
-          train_shots=None,
+          #train_shots=None,
           transductive=False,
           reptile_fn=Reptile,
           log_fn=print):
@@ -44,8 +44,17 @@ def train(sess,
                          model=model,
                          transductive=transductive,
                          pre_step_op=weight_decay(weight_decay_rate))
+
     accuracy_ph = tf.placeholder(tf.float32, shape=())
     tf.summary.scalar('accuracy', accuracy_ph)
+
+    losses_ph = []
+
+    for index in range(inner_iters):
+        loss_ph = tf.placeholder(tf.float32, shape=())
+        tf.summary.scalar('loss_iter_{}'.format(index), loss_ph)
+        losses_ph.append(loss_ph)
+
     merged = tf.summary.merge_all()
 
     train_writer = tf.summary.FileWriter(os.path.join(save_dir, 'train'), sess.graph)
@@ -59,7 +68,7 @@ def train(sess,
         on_eval_iter = (i%eval_interval == 0)
 
         reptile.train_step(train_set, model.input_ph, model.label_ph, model.minimize_op,
-                num_classes=num_classes, num_shots=(train_shots or num_shots),
+                num_classes=num_classes, num_shots=num_shots,
                 inner_batch_size=inner_batch_size, inner_iters=inner_iters,
                 replacement=replacement, meta_step_size=cur_meta_step_size,
                 meta_batch_size=meta_batch_size)
@@ -67,12 +76,14 @@ def train(sess,
         if on_eval_iter:
             accuracies = []
             for dataset, writer in [(train_set, train_writer), (test_set, test_writer)]:
-                correct = reptile.evaluate(dataset, model.input_ph, model.label_ph,
+                correct, losses = reptile.evaluate(dataset, model.input_ph, model.label_ph,
                                            model.minimize_op, model.predictions,
                                            num_classes=num_classes, num_shots=num_shots,
                                            inner_batch_size=eval_inner_batch_size,
                                            inner_iters=eval_inner_iters, replacement=replacement)
-                summary = sess.run(merged, feed_dict={accuracy_ph: correct/num_classes})
+
+                summary = sess.run(merged, feed_dict={x:y for x, y in zip([accuracy_ph] + losses_ph,
+                    [correct/num_classes] + losses)})
                 writer.add_summary(summary, i) 
                 writer.flush()
                 accuracies.append(correct / num_classes)
