@@ -65,6 +65,7 @@ class MiniImageNetModel:
         optimizer_instance = optimizer(self.learning_rate)
  
         self.gvs = optimizer_instance.compute_gradients(self.loss)
+        self.gvs = [(tf.clip_by_value(g, -10, 10), v) for g, v in self.gvs]
 
         self.minimize_op = optimizer_instance.apply_gradients(self.gvs)
         self.optimizer = optimizer_instance
