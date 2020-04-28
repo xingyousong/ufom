@@ -42,7 +42,7 @@ def argument_parser():
     #                    default=None, type=int)
     #parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
     parser.add_argument('--n_layers', help='', default=4, type=int)
-    parser.add_argument('--clip_grads', help='', action='store_true')
+    #parser.add_argument('--clip_grads', help='', action='store_true')
     return parser
 
 def model_kwargs(parsed_args):
@@ -54,7 +54,6 @@ def model_kwargs(parsed_args):
     res = {
         'learning_rate': parsed_args.learning_rate,
         'n_layers': parsed_args.n_layers,
-        'clip_grads': parsed_args.clip_grads
     }
 
     #if parsed_args.sgd:
