@@ -16,11 +16,22 @@ class OmniglotModel:
     """
     def __init__(self, num_classes, optimizer=DEFAULT_OPTIMIZER, **optim_kwargs):
 
+        self.clip_grads = optim_kwargs['clip_grads']
+        self.clip_grad_value = optim_kwargs['clip_grad_value']
+
         self.input_ph = tf.placeholder(tf.float32, shape=(None, 28, 28))
         out = tf.reshape(self.input_ph, (-1, 28, 28, 1))
 
+        if optim_kwargs['mlp']:
+            hidden_sizes = [256, 128, 64, 64]
+
         for index in range(optim_kwargs['n_layers']):
-            out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
+
+            if optim_kwargs['mlp']:
+                out = tf.layers.dense(out, hidden_sizes[index])
+            else:
+                out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
+
             out = tf.layers.batch_normalization(out, training=True)
             out = tf.nn.relu(out)
 
@@ -34,7 +45,6 @@ class OmniglotModel:
         optimizer_instance = optimizer(self.learning_rate)
 
         self.gvs = optimizer_instance.compute_gradients(self.loss)
-        #self.gvs = [(tf.clip_by_value(g, -10, 10), v) for g, v in self.gvs]
 
         self.minimize_op = optimizer_instance.apply_gradients(self.gvs)
         self.optimizer = optimizer_instance
@@ -45,6 +55,9 @@ class MiniImageNetModel:
     A model for Mini-ImageNet classification.
     """
     def __init__(self, num_classes, optimizer=DEFAULT_OPTIMIZER, **optim_kwargs):
+ 
+        self.clip_grads = optim_kwargs['clip_grads']
+        self.clip_grad_value = optim_kwargs['clip_grad_value']
 
         self.input_ph = tf.placeholder(tf.float32, shape=(None, 84, 84, 3))
         out = self.input_ph
@@ -65,7 +78,6 @@ class MiniImageNetModel:
         optimizer_instance = optimizer(self.learning_rate)
  
         self.gvs = optimizer_instance.compute_gradients(self.loss)
-        #self.gvs = [(tf.clip_by_value(g, -10, 10), v) for g, v in self.gvs]
 
         self.minimize_op = optimizer_instance.apply_gradients(self.gvs)
         self.optimizer = optimizer_instance

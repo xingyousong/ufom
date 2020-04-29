@@ -297,6 +297,10 @@ class UnbMAML:
                 test_update = self._get_test_update(input_ph, label_ph, test_batch, minimize_op)
                 update = add_vars(update, test_update)
 
+            if self.model.clip_grads:
+                clip_value = self.model.clip_grad_value
+                update = [np.clip(x, -clip_value, clip_value) for x in update]
+
         return update
 
     def evaluate(self,
