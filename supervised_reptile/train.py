@@ -4,6 +4,7 @@ Training helpers for supervised meta-learning.
 
 import os
 import time
+import numpy as np
 
 import tensorflow as tf
 
@@ -30,13 +31,14 @@ def train(sess,
           eval_interval=10,
           weight_decay_rate=1,
           time_deadline=None,
-          #train_shots=None,
+          train_shots=None,
           transductive=False,
           reptile_fn=Reptile,
           log_fn=print):
     """
     Train a model on a dataset.
     """
+
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     saver = tf.train.Saver()
@@ -44,6 +46,9 @@ def train(sess,
                          model=model,
                          transductive=transductive,
                          pre_step_op=weight_decay(weight_decay_rate))
+
+    if train_shots is None:
+        train_shots = num_shots
 
     accuracy_ph = tf.placeholder(tf.float32, shape=())
     tf.summary.scalar('accuracy', accuracy_ph)
@@ -76,17 +81,25 @@ def train(sess,
         if on_eval_iter:
             accuracies = []
             for dataset, writer in [(train_set, train_writer), (test_set, test_writer)]:
-                correct, losses = reptile.evaluate(dataset, model.input_ph, model.label_ph,
+                result = reptile.evaluate(dataset, model.input_ph, model.label_ph,
                                            model.minimize_op, model.predictions,
-                                           num_classes=num_classes, num_shots=num_shots,
+                                           num_classes=num_classes, num_shots=train_shots,
                                            inner_batch_size=eval_inner_batch_size,
                                            inner_iters=eval_inner_iters, replacement=replacement)
 
-                summary = sess.run(merged, feed_dict={x:y for x, y in zip([accuracy_ph] + losses_ph,
-                    [correct/num_classes] + losses)})
-                writer.add_summary(summary, i) 
+                if type(result) == np.int64:
+                    correct = result
+                    summary = sess.run(merged, feed_dict={x:y for x, y in zip([accuracy_ph] + losses_ph,
+                        [correct/num_classes] + [0]*len(losses_ph))})
+                else:
+                    correct, losses = result
+                    summary = sess.run(merged, feed_dict={x:y for x, y in zip([accuracy_ph] + losses_ph,
+                        [correct/num_classes] + losses)})
+
+                writer.add_summary(summary, i)
                 writer.flush()
                 accuracies.append(correct / num_classes)
+
             log_fn('batch %d: train=%f test=%f' % (i, accuracies[0], accuracies[1]))
 
         if i % 100 == 0 or i == meta_iters-1:

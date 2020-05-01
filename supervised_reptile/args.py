@@ -20,7 +20,7 @@ def argument_parser():
     parser.add_argument('--checkpoint', help='checkpoint directory', default='model_checkpoint')
     parser.add_argument('--classes', help='number of classes per inner task', default=5, type=int)
     parser.add_argument('--shots', help='number of examples per class', default=5, type=int)
-    #parser.add_argument('--train-shots', help='shots in a training batch', default=0, type=int)
+    parser.add_argument('--train-shots', help='shots in a training batch', default=0, type=int)
     parser.add_argument('--inner-batch', help='inner batch size', default=5, type=int)
     parser.add_argument('--inner-iters', help='inner iterations', default=20, type=int)
     parser.add_argument('--replacement', help='sample with replacement', action='store_true')
@@ -75,7 +75,7 @@ def train_kwargs(parsed_args):
     return {
         'num_classes': parsed_args.classes,
         'num_shots': parsed_args.shots,
-        #'train_shots': (parsed_args.train_shots or None),
+        'train_shots': (parsed_args.train_shots or None),
         'inner_batch_size': parsed_args.inner_batch,
         'inner_iters': parsed_args.inner_iters,
         'replacement': parsed_args.replacement,
@@ -109,5 +109,8 @@ def evaluate_kwargs(parsed_args):
     }
 
 def _args_reptile(parsed_args):
+
+    if parsed_args.mode == 'Reptile':
+        return Reptile
 
     return partial(UnbMAML, exact_prob=parsed_args.exact_prob, mode=parsed_args.mode)
