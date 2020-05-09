@@ -183,7 +183,7 @@ class UnbMAML:
                    minimize_op,
                    num_classes,
                    num_shots,
-                   inner_batch_size,
+                   inner_batch_size, # not used
                    inner_iters,
                    replacement,
                    meta_step_size,
