@@ -319,8 +319,6 @@ class UnbMAML:
 
         old_vars = self._full_state.export_variables()
 
-        losses = []
-
         for _ in range(inner_iters):
 
             inputs, labels = zip(*train_batch)
@@ -328,17 +326,14 @@ class UnbMAML:
             if self._pre_step_op:
                 self.session.run(self._pre_step_op)
 
-            loss, _ = self.session.run([self.model.loss, minimize_op], feed_dict={input_ph: inputs,
-                label_ph: labels})
-
-            losses.append(np.mean(loss))
+            self.session.run(minimize_op, feed_dict={input_ph: inputs, label_ph: labels})
 
         test_preds = self._test_predictions(train_batch, test_batch, input_ph, predictions)
         num_correct = sum([pred == sample[1] for pred, sample in zip(test_preds, test_batch)])
 
         self._full_state.import_variables(old_vars)
 
-        return num_correct, losses
+        return num_correct
 
     def _test_predictions(self, train_set, test_set, input_ph, predictions):
         if self._transductive:

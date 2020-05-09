@@ -35,16 +35,15 @@ def argument_parser():
     parser.add_argument('--eval-samples', help='evaluation samples', default=10000, type=int)
     parser.add_argument('--eval-interval', help='train steps per eval', default=10, type=int)
     parser.add_argument('--weight-decay', help='weight decay rate', default=1, type=float)
-    #parser.add_argument('--transductive', help='evaluate all samples at once', action='store_true')
+    parser.add_argument('--nontransductive', help='nontransductive', action='store_true')
     parser.add_argument('--mode', help='Reptile, FOML, STFOML', default='Reptile', type=str)
     parser.add_argument('--exact_prob', help='', default=0.0, type=float)
     #parser.add_argument('--foml-tail', help='number of shots for the final mini-batch in FOML',
     #                    default=None, type=int)
-    #parser.add_argument('--sgd', help='use vanilla SGD instead of Adam', action='store_true')
+    parser.add_argument('--adam', help='use Adam', action='store_true')
     parser.add_argument('--n_layers', help='', default=4, type=int)
     parser.add_argument('--clip_grads', help='', action='store_true')
     parser.add_argument('--clip_grad_value', help='', default=0.0, type=float)
-    parser.add_argument('--mlp', help='', action='store_true')
     return parser
 
 def model_kwargs(parsed_args):
@@ -57,13 +56,12 @@ def model_kwargs(parsed_args):
         'learning_rate': parsed_args.learning_rate,
         'n_layers': parsed_args.n_layers,
         'clip_grads': parsed_args.clip_grads,
-        'clip_grad_value': parsed_args.clip_grad_value,
-        'mlp': parsed_args.mlp
+        'clip_grad_value': parsed_args.clip_grad_value
     }
 
     #if parsed_args.sgd:
-
-    res['optimizer'] = tf.train.GradientDescentOptimizer
+    if not parsed_args.adam:
+        res['optimizer'] = tf.train.GradientDescentOptimizer
 
     return res
 
@@ -87,7 +85,7 @@ def train_kwargs(parsed_args):
         'eval_inner_iters': parsed_args.eval_iters,
         'eval_interval': parsed_args.eval_interval,
         'weight_decay_rate': parsed_args.weight_decay,
-        'transductive': True, #parsed_args.transductive,
+        'transductive': (not parsed_args.nontransductive),
         'reptile_fn': _args_reptile(parsed_args),
     }
 
@@ -104,7 +102,7 @@ def evaluate_kwargs(parsed_args):
         'replacement': parsed_args.replacement,
         'weight_decay_rate': parsed_args.weight_decay,
         'num_samples': parsed_args.eval_samples,
-        'transductive': True, #parsed_args.transductive,
+        'transductive': (not parsed_args.nontransductive),
         'reptile_fn': _args_reptile(parsed_args)
     }
 

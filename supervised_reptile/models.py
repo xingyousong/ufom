@@ -22,16 +22,8 @@ class OmniglotModel:
         self.input_ph = tf.placeholder(tf.float32, shape=(None, 28, 28))
         out = tf.reshape(self.input_ph, (-1, 28, 28, 1))
 
-        if optim_kwargs['mlp']:
-            hidden_sizes = [256, 128, 64, 64]
-
         for index in range(optim_kwargs['n_layers']):
-
-            if optim_kwargs['mlp']:
-                out = tf.layers.dense(out, hidden_sizes[index])
-            else:
-                out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
-
+            out = tf.layers.conv2d(out, 64, 3, strides=2, padding='same')
             out = tf.layers.batch_normalization(out, training=True)
             out = tf.nn.relu(out)
 
