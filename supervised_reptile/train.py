@@ -51,8 +51,12 @@ def train(sess,
         train_shots = num_shots
 
     accuracy_ph = tf.placeholder(tf.float32, shape=())
-    tf.summary.scalar('accuracy', accuracy_ph)
-    merged = tf.summary.merge_all()
+    acc_summary = tf.summary.scalar('accuracy', accuracy_ph)
+
+    on_exact_count_ph = tf.placeholder(tf.int32, shape=())
+    on_exact_count_summary = tf.summary.scalar('on_exact_count', on_exact_count_ph)
+
+    #merged = tf.summary.merge_all()
 
     train_writer = tf.summary.FileWriter(os.path.join(save_dir, 'train'), sess.graph)
     test_writer = tf.summary.FileWriter(os.path.join(save_dir, 'test'), sess.graph)
@@ -62,11 +66,15 @@ def train(sess,
         frac_done = i / meta_iters
         cur_meta_step_size = frac_done * meta_step_size_final + (1 - frac_done) * meta_step_size
 
-        reptile.train_step(train_set, model.input_ph, model.label_ph, model.minimize_op,
+        result = reptile.train_step(train_set, model.input_ph, model.label_ph, model.minimize_op,
                 num_classes=num_classes, num_shots=train_shots,
                 inner_batch_size=inner_batch_size, inner_iters=inner_iters,
                 replacement=replacement, meta_step_size=cur_meta_step_size,
                 meta_batch_size=meta_batch_size)
+
+        if result is not None:
+            summary = sess.run(on_exact_count_summary, feed_dict={on_exact_count_ph: result})
+            train_writer.add_summary(summary, i)
 
         if i%eval_interval == 0:
             accuracies = []
@@ -77,7 +85,7 @@ def train(sess,
                                            inner_batch_size=eval_inner_batch_size,
                                            inner_iters=eval_inner_iters, replacement=replacement)
 
-                summary = sess.run(merged, feed_dict={accuracy_ph: correct/num_classes})
+                summary = sess.run(acc_summary, feed_dict={accuracy_ph: correct/num_classes})
 
                 writer.add_summary(summary, i)
                 writer.flush()

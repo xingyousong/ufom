@@ -194,11 +194,14 @@ class UnbMAML(Reptile):
 
         init_vars = self._model_state.export_variables()
 
+        on_exact_count = 0
+
         for meta_batch_index in range(meta_batch_size):
 
             on_exact = (np.random.rand() < self.exact_prob)
 
             if on_exact:
+                on_exact_count += 1
                 var_states = [init_vars]
 
             if self.on_resampling:
@@ -238,7 +241,7 @@ class UnbMAML(Reptile):
         update = average_vars(updates)
         self._model_state.import_variables(add_vars(init_vars, scale_vars(update, meta_step_size)))
 
-        return None
+        return on_exact_count
 
     def _get_test_update(self, input_ph, label_ph, test_batch, minimize_op):
 
