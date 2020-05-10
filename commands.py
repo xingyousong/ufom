@@ -20,7 +20,7 @@ for seed in [0, 1, 2]:
                         "config.learning_rate": 0.005,
                         "config.train_shots": None,
                         "config.meta_step_final": 0,
-                        "config.checkpoint": "ckpt_o1{0}_FOML_prob={1}_ii={2}_seed={0}".format(n_classes, prob, inner_iters, seed),
+                        "config.checkpoint": "ckpt_o1{0}_FOML_prob={1}_ii={2}_seed={3}".format(n_classes, prob, inner_iters, seed),
                         "config.mode": 'FOML',
                         "config.exact_prob": prob,
                         "config.clip_grads": (inner_iters == 10),
@@ -28,6 +28,29 @@ for seed in [0, 1, 2]:
                         "config.on_resampling": False
                     }
                     all_h_params.append(h_params)
+
+for n_classes in [20, 30]:
+    for learning_rate in [0.005, 0.0005]:
+        for seed in [0, 1, 2]:
+            h_params = {
+                "config.dataset": "omniglot",
+                "config.shots": 1,
+                "config.classes": n_classes,
+                "config.inner_batch": n_classes,
+                "config.inner_iters": 10,
+                "config.meta_step": 0.0005/learning_rate,
+                "config.meta_batch": 5,
+                "config.meta_iters": 200000,
+                "config.eval_batch": 10,
+                "config.eval_iters": 50,
+                "config.learning_rate": learning_rate,
+                "config.meta_step_final": 0,
+                "config.train_shots": 10,
+                "config.checkpoint": "ckpt_o1{0}_Reptile_lr={1}_seed={2}".format(n_classes, learning_rate, seed),
+                "config.mode": 'Reptile',
+                "config.adam": True
+            }
+            all_h_params.append(h_params)
 
 '''
 # Mini-ImageNet.
