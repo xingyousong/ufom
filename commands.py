@@ -34,6 +34,7 @@ for n_classes in [20, 30]:
         for seed in [0, 1, 2]:
             h_params = {
                 "config.dataset": "omniglot",
+                "config.seed": seed,
                 "config.shots": 1,
                 "config.classes": n_classes,
                 "config.inner_batch": n_classes,
