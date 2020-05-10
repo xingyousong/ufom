@@ -44,6 +44,7 @@ def argument_parser():
     parser.add_argument('--n_layers', help='', default=4, type=int)
     parser.add_argument('--clip_grads', help='', action='store_true')
     parser.add_argument('--clip_grad_value', help='', default=0.0, type=float)
+    parser.add_argument('--on_resampling', help='', action='store_true')
     return parser
 
 def model_kwargs(parsed_args):
@@ -111,4 +112,5 @@ def _args_reptile(parsed_args):
     if parsed_args.mode == 'Reptile':
         return Reptile
 
-    return partial(UnbMAML, exact_prob=parsed_args.exact_prob, mode=parsed_args.mode)
+    return partial(UnbMAML, exact_prob=parsed_args.exact_prob, mode=parsed_args.mode,
+            on_resampling=parsed_args.on_resampling)

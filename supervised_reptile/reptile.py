@@ -138,13 +138,13 @@ class Reptile:
         return res
 
 
-class UnbMAML:
+class UnbMAML(Reptile):
     '''
     Not compatible with adaptive optimizers in `minimize_op`.
     '''
 
     def __init__(self, session, mode=None, model=None, tail_shots=None, variables=None,
-            transductive=False, pre_step_op=None, exact_prob=None):
+            transductive=False, pre_step_op=None, exact_prob=None, on_resampling=None):
 
         self.session = session
 
@@ -161,6 +161,7 @@ class UnbMAML:
         self.mode = mode
         self.exact_prob = exact_prob
         self.model = model
+        self.on_resampling = on_resampling
 
         self._learning_rate = model.learning_rate
 
@@ -183,9 +184,9 @@ class UnbMAML:
                    minimize_op,
                    num_classes,
                    num_shots,
-                   inner_batch_size, # not used
+                   inner_batch_size,
                    inner_iters,
-                   replacement,
+                   replacement, # not used
                    meta_step_size,
                    meta_batch_size):
 
@@ -200,13 +201,18 @@ class UnbMAML:
             if on_exact:
                 var_states = [init_vars]
 
-            train_batch, test_batch = _sample_train_test_batch(dataset, num_classes, num_shots)
+            if self.on_resampling:
+                mini_dataset = _sample_mini_dataset(dataset, num_classes, num_shots)
+                mini_batches = list(self._mini_batches(mini_dataset, inner_batch_size, inner_iters, False))
+            else:
+                train_batch, test_batch = _sample_train_test_batch(dataset, num_classes, num_shots)
+                mini_batches = [train_batch]*(inner_iters - 1) + [test_batch]
 
             self._model_state.import_variables(init_vars)
 
-            for batch_index in range(inner_iters):
+            for batch in mini_batches[:-1]:
 
-                inputs, labels = zip(*train_batch)
+                inputs, labels = zip(*batch)
 
                 if self._pre_step_op:
                     self.session.run(self._pre_step_op)
@@ -214,26 +220,14 @@ class UnbMAML:
                 self.session.run(minimize_op, feed_dict={input_ph: inputs,
                     label_ph: labels})
 
-                if self.mode == 'STFOML':
-
-                    cur_update = self._get_test_update(input_ph, label_ph, test_batch, minimize_op)
-
-                    if batch_index == 0:
-                        update = cur_update
-                    else:
-                        update = add_vars(update, cur_update)
-
                 if on_exact:
                     var_states.append(self._model_state.export_variables())
 
-            if self.mode == 'Reptile':
-                update = subtract_vars(self._model_state.export_variables(), init_vars)
-            else:
-                update = self._get_test_update(input_ph, label_ph, test_batch, minimize_op)
+            update = self._get_test_update(input_ph, label_ph, mini_batches[-1], minimize_op)
 
             if on_exact:
 
-                exact_update = self._get_exact_update(input_ph, label_ph, train_batch, test_batch,
+                exact_update = self._get_exact_update(input_ph, label_ph, mini_batches,
                     var_states, minimize_op)
 
                 update = add_vars(update, scale_vars(subtract_vars(exact_update, update),
@@ -264,19 +258,15 @@ class UnbMAML:
 
         return update
 
-    def _get_exact_update(self, input_ph, label_ph, train_batch, test_batch, var_states,
+    def _get_exact_update(self, input_ph, label_ph, mini_batches, var_states,
             minimize_op):
 
-        if self.mode == 'Reptile':
-            update = subtract_vars(var_states[-1], var_states[-2])
-            var_states = var_states[:-1]
-        else:
-            self._model_state.import_variables(var_states[-1])
-            update = self._get_test_update(input_ph, label_ph, test_batch, minimize_op)
+        self._model_state.import_variables(var_states[-1])
+        update = self._get_test_update(input_ph, label_ph, mini_batches[-1], minimize_op)
 
         for var_index in range(len(var_states) - 2, -1, -1):
 
-            inputs, labels = zip(*train_batch)
+            inputs, labels = zip(*mini_batches[var_index])
 
             self._model_state.import_variables(var_states[var_index])
 
@@ -289,13 +279,6 @@ class UnbMAML:
 
             hess_prod = scale_vars(hess_prod, self._learning_rate)
             update = subtract_vars(update, hess_prod)
-
-            if self.mode == 'Reptile':
-                update = add_vars(update, subtract_vars(var_states[var_index + 1],
-                    var_states[var_index]))
-            elif self.mode == 'STFOML':
-                test_update = self._get_test_update(input_ph, label_ph, test_batch, minimize_op)
-                update = add_vars(update, test_update)
 
             if self.model.clip_grads:
                 clip_value = self.model.clip_grad_value
@@ -315,36 +298,33 @@ class UnbMAML:
                  inner_iters,
                  replacement):
 
-        train_batch, test_batch = _sample_train_test_batch(dataset, num_classes, num_shots)
-
+        if self.on_resampling:
+            train_set, test_set = _split_train_test(_sample_mini_dataset(dataset, num_classes,
+                    num_shots + 1))
+            mini_batches = list(_mini_batches(train_set, inner_batch_size, inner_iters, False))
+        else:
+            train_set, test_set = _sample_train_test_batch(dataset, num_classes, num_shots)
+            mini_batches = [train_set]*(inner_iters - 1)
+ 
         old_vars = self._full_state.export_variables()
-
-        for _ in range(inner_iters):
-
-            inputs, labels = zip(*train_batch)
-
+        for batch in mini_batches:
+            inputs, labels = zip(*batch)
             if self._pre_step_op:
                 self.session.run(self._pre_step_op)
-
             self.session.run(minimize_op, feed_dict={input_ph: inputs, label_ph: labels})
-
-        test_preds = self._test_predictions(train_batch, test_batch, input_ph, predictions)
-        num_correct = sum([pred == sample[1] for pred, sample in zip(test_preds, test_batch)])
-
+        test_preds = self._test_predictions(train_set, test_set, input_ph, predictions)
+        num_correct = sum([pred == sample[1] for pred, sample in zip(test_preds, test_set)])
         self._full_state.import_variables(old_vars)
-
         return num_correct
 
-    def _test_predictions(self, train_set, test_set, input_ph, predictions):
-        if self._transductive:
-            inputs, _ = zip(*test_set)
-            return self.session.run(predictions, feed_dict={input_ph: inputs})
-        res = []
-        for test_sample in test_set:
-            inputs, _ = zip(*train_set)
-            inputs += (test_sample[0],)
-            res.append(self.session.run(predictions, feed_dict={input_ph: inputs})[-1])
-        return res
+    def _mini_batches(self, mini_dataset, inner_batch_size, inner_iters, replacement):
+
+        train, tail = _split_train_test(mini_dataset, test_shots=1)
+
+        for batch in _mini_batches(train, inner_batch_size, inner_iters - 1, replacement):
+            yield batch
+
+        yield tail
 
 class FOML(Reptile):
     """
