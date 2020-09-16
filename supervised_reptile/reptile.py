@@ -41,7 +41,8 @@ class Reptile:
                    inner_iters,
                    replacement,
                    meta_step_size,
-                   meta_batch_size):
+                   meta_batch_size,
+                   frac_done):
         """
         Perform a Reptile training step.
 
@@ -188,7 +189,8 @@ class UnbMAML(Reptile):
                    inner_iters,
                    replacement, # not used
                    meta_step_size,
-                   meta_batch_size):
+                   meta_batch_size,
+                   frac_done):
 
         updates = []
 
@@ -198,7 +200,13 @@ class UnbMAML(Reptile):
 
         for meta_batch_index in range(meta_batch_size):
 
-            on_exact = (np.random.rand() < self.exact_prob)
+            if self.exact_prob >= 0.0:
+                exact_prob = self.exact_prob
+            else:
+                exact_prob = np.power(frac_done, -self.exact_prob)
+
+            on_exact = (np.random.rand() < exact_prob)
+            
 
             if on_exact:
                 on_exact_count += 1
@@ -372,7 +380,8 @@ class FOML(Reptile):
                    inner_iters,
                    replacement,
                    meta_step_size,
-                   meta_batch_size):
+                   meta_batch_size,
+                   frac_done):
         old_vars = self._model_state.export_variables()
         updates = []
         for _ in range(meta_batch_size):
