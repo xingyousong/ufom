@@ -53,6 +53,7 @@ def train(sess,
     accuracy_ph = tf.placeholder(tf.float32, shape=())
     acc_summary = tf.summary.scalar('accuracy', accuracy_ph)
 
+    total_on_exact_count = 0
     on_exact_count_ph = tf.placeholder(tf.int32, shape=())
     on_exact_count_summary = tf.summary.scalar('on_exact_count', on_exact_count_ph)
 
@@ -70,10 +71,11 @@ def train(sess,
                 num_classes=num_classes, num_shots=train_shots,
                 inner_batch_size=inner_batch_size, inner_iters=inner_iters,
                 replacement=replacement, meta_step_size=cur_meta_step_size,
-                meta_batch_size=meta_batch_size)
+                meta_batch_size=meta_batch_size, frac_done=frac_done)
 
         if result is not None:
-            summary = sess.run(on_exact_count_summary, feed_dict={on_exact_count_ph: result})
+            total_on_exact_count += result
+            summary = sess.run(on_exact_count_summary, feed_dict={on_exact_count_ph: total_on_exact_count})
             train_writer.add_summary(summary, i)
 
         if i%eval_interval == 0:
