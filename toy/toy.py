@@ -10,23 +10,14 @@ np.random.seed(42)
 
 def simulate_fo_div(subplot_indices):
 
-    '''
     r = 10
     alpha = 0.1
     a1 = 0.5
     a2 = 1.5
     D = 0.06
     b1, b2, A = get_div_problem(r, alpha, a1, a2, D)
-    '''
 
-
-    alpha = 0.1
-    r = 10
-    a1 = 0.5#1.0
-    a2 = 1.5
-    b1 = 0
-    b2 = 10
-    A = 400#0
+    print(b1, b2, A)
 
     x0_min = -10
     x0_max = 30
@@ -53,7 +44,7 @@ def simulate_fo_div(subplot_indices):
     sim_vals = []
     sim_derivs = []
 
-    for q in [0.5, 0.9]:#[0, 0.1]:
+    for q in [0, 0.1]:
 
         x0 = np.random.uniform(x0_min, x0_max, size=samples_count)
 
@@ -102,7 +93,7 @@ def simulate_fo_div(subplot_indices):
 def simulate_bounds(subplot_indices):
 
     r = 10
-    a1 = 0.5#1.0
+    a1 = 1.0
     a2 = 1.5
     b1 = 0
     b2 = 10
@@ -117,13 +108,13 @@ def simulate_bounds(subplot_indices):
     b1, b2, A = get_div_problem(r, alpha, a1, a2, D)
     '''
 
-    x_min = -50#1000
-    x_max = 50#1000
-    x0_min = -100
-    x0_max = 100
+    x_min = -50
+    x_max = 50
+    x0_min = -50
+    x0_max = 50
 
     min_alpha = 0.001
-    max_alpha = 0.01
+    max_alpha = 0.05
 
     x0_count = 500
     runs_count = 1
@@ -183,9 +174,6 @@ def simulate_bounds(subplot_indices):
 
     qs_count = 5#10
     qs = np.linspace(0.1, 1.0, qs_count)
-    delta = 0.001
-
-    best_q_for_alphas = []
 
     tensor = np.ones((x0_count, runs_count, alphas_count, qs_count))
 
@@ -200,26 +188,66 @@ def simulate_bounds(subplot_indices):
     sqr_derivs = get_true_blo_derivs(r, alphas_all, as_, bs, A, sim_xs)**2
     print('Done derivative computation')
 
-    reached_delta = (sqr_derivs < delta).astype(int)
+    np.savez('toy', sim_xs=sim_xs, f_calls=f_calls, sqr_derivs=sqr_derivs)
+    #data = np.load('toy.npz')
+    #sim_xs, f_calls, sqr_derivs = data['sim_xs'], data['f_calls'], data['sqr_derivs']
+
+    sqr_derivs = sqr_derivs.reshape(-1, x0_count, runs_count, alphas_count, qs_count)
+    sqr_derivs = sqr_derivs.mean(axis=(1, 2))
+    deltas = sqr_derivs[-1, :, 0, None]*np.ones((alphas_count, qs_count))
+    sqr_derivs = sqr_derivs.reshape(sqr_derivs.shape[0], -1)
+    deltas = deltas.ravel()
+
+    f_calls = f_calls.reshape(-1, x0_count, runs_count, alphas_count, qs_count)
+    f_calls = f_calls.mean(axis=(1, 2))
+    f_calls = f_calls.reshape(f_calls.shape[0], -1)
+
+    reached_delta = (sqr_derivs <= deltas).astype(int)
     first_indices = reached_delta.argmax(axis=0)
     first_indices[sqr_derivs[first_indices, np.arange(len(first_indices))] == 0] = sqr_derivs.shape[0] - 1
 
-    total_calls = first_indices#f_calls[first_indices, np.arange(len(first_indices))]
-    total_calls = total_calls.reshape(x0_count, runs_count, alphas_count, qs_count)
-    total_calls = total_calls.mean(axis=(0, 1))#.max(axis=0)
+    print(first_indices.reshape(alphas_count, qs_count))
+
+    total_calls = f_calls[first_indices, np.arange(len(first_indices))]
+    total_calls = total_calls.reshape(alphas_count, qs_count)
 
     print(total_calls)
 
-    best_q_for_alphas = qs[total_calls.argmin(axis=1)]
- 
+    best_qs = qs[total_calls.argmin(axis=1)]
+
+    best_th_qs = []
+
+    for D2_true, V2_true in zip(D2s_true, V2s_true):
+
+        if D2_true >= 2*r*V2_true/(2*r + 1):
+            best_th_qs.append(1)
+            continue
+
+        a = r*(V2_true - D2_true)
+        b = D2_true*0.5*r
+        c = -D2_true*0.5*(r + 1)
+
+        q1 = (-b - np.sqrt(b**2 - 4*a*c))/(2*a)
+        q2 = (-b + np.sqrt(b**2 - 4*a*c))/(2*a)
+
+        if q1 > 0 and q1 < 1:
+            best_th_qs.append(q1)
+        else:
+            best_th_qs.append(q2)
+
     plt.subplot(subplot_indices[1])
 
-    plt.plot(alpha_range, best_q_for_alphas, label='Practice')
+    print(best_qs)
+    print(best_th_qs)
+
+    plt.plot(alpha_range, best_qs, 'g', label='experiment')
+    plt.plot(alpha_range, best_th_qs, 'y--', label='theory')
+    plt.plot()
 
     plt.xscale('log')
     plt.xlabel('$\\alpha$')
     plt.ylabel('$q$')
-    plt.legend()       
+    plt.legend()
 
 def get_div_problem(r, alpha, a1, a2, D):
 
