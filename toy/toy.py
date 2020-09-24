@@ -8,7 +8,7 @@ matplotlib.rcParams['font.size'] = 20
 
 np.random.seed(42)
 
-def simulate_fo_div(subplot_indices):
+def simulate_fo_div():
 
     r = 10
     alpha = 0.1
@@ -23,7 +23,7 @@ def simulate_fo_div(subplot_indices):
     x0_max = 30
 
     draw_points_count = 1000
-    samples_count = 10
+    samples_count = 5
 
     as_ = np.array([a1, a2])
     bs = np.array([b1, b2])
@@ -32,13 +32,16 @@ def simulate_fo_div(subplot_indices):
 
     task1_ys = np.array([f_and_deriv(a1, b1, A, x)[0] for x in task_draw_xs])
     task2_ys = np.array([f_and_deriv(a2, b2, A, x)[0] for x in task_draw_xs])
+ 
+    fig = plt.figure(figsize=(6, 5))
 
-    plt.subplot(subplot_indices[0])
-
-    plt.plot(task_draw_xs, task1_ys, 'm--', label='task 1', linewidth=3)
-    plt.plot(task_draw_xs, task2_ys, 'c', label='task 2', linewidth=3)
-    plt.xlabel('$\phi$')
+    plt.plot(task_draw_xs, task1_ys, 'm--', label='$\\mathcal{T\\,}^{(1)}$', linewidth=3)
+    plt.plot(task_draw_xs, task2_ys, 'c', label='$\\mathcal{T\\,}^{(2)}$', linewidth=3)
+    plt.xlabel('$\\phi$')
     plt.legend()
+ 
+    fig.tight_layout()
+    plt.savefig('toy_tasks.pdf', bbox_inches='tight')
 
     sim_xs = []
     sim_vals = []
@@ -59,15 +62,18 @@ def simulate_fo_div(subplot_indices):
     obj_draw_xs = np.linspace(-2, 9, draw_points_count)
     obj_draw_vals = get_true_blo_values(r, alpha, as_, bs, A, obj_draw_xs)
 
-    plt.subplot(subplot_indices[1])
+    fig = plt.figure(figsize=(6, 5))
 
-    plt.plot(obj_draw_xs, obj_draw_vals, 'k', label='$\mathcal{M} (\\theta)$', linewidth=2)
-    plt.scatter(sim_xs[0], sim_vals[0], c='r', s=200, label='FO-BLO $\\theta^*$', zorder=10, marker='+')
-    plt.scatter(sim_xs[1], sim_vals[1], c='b', s=200, label='UFO-BLO $\\theta^*$', zorder=10, marker='x')
+    plt.plot(obj_draw_xs, obj_draw_vals, 'k', label='$\mathcal{M}^{(r)} (\\theta)$', linewidth=2)
+    plt.scatter(sim_xs[0], sim_vals[0], c='r', s=200, label='FOM $\\theta^*$', zorder=10, marker='+')
+    plt.scatter(sim_xs[1], sim_vals[1], c='b', s=200, label='UFOM $\\theta^*$', zorder=10, marker='x')
     plt.xlabel('$\\theta$')
     plt.legend()
 
-    plt.subplot(subplot_indices[2])
+    fig.tight_layout()
+    plt.savefig('toy_loss.pdf', bbox_inches='tight')
+
+    fig = plt.figure(figsize=(6, 5))
 
     iter_range = np.arange(0, sim_derivs[0].shape[0], 200)
 
@@ -90,23 +96,113 @@ def simulate_fo_div(subplot_indices):
     plt.ylabel('$| \\frac{\\partial}{\\partial \\theta} \mathcal{M}^{(r)} (\\theta_k) |$')
     plt.legend()
 
-def simulate_bounds(subplot_indices):
+    fig.tight_layout()
+    plt.savefig('toy_curve.pdf', bbox_inches='tight')
+
+def simulate_curves():
 
     r = 10
     a1 = 0.5
     a2 = 1.5
     b1 = 0
     b2 = 10
-    A = 400#0
+    A = 400
 
-    '''
+    x0_min = -50
+    x0_max = 50
+
+    alpha = 0.01
+
+    x0_count = 500
+
+    iter_count = 10000
+
+    as_ = np.array([a1, a2])
+    bs = np.array([b1, b2])
+
+    x_min = -50
+    x_max = 50
+    xs_count = 10000
+
+    xs = np.linspace(x_min, x_max, xs_count)
+
+    _, fo_deriv1, deriv1 = blo_and_deriv(r, alpha, as_[0], bs[0], A, xs)
+    _, fo_deriv2, deriv2 = blo_and_deriv(r, alpha, as_[1], bs[1], A, xs)
+
+    D2_true = ((fo_deriv1 - deriv1)**2 + (fo_deriv2 - deriv2)**2).max()/2
+    V2_true = (deriv1**2 + deriv2**2).max()/2
+
+    a = r*(V2_true - D2_true)
+    b = D2_true*0.5*r
+    c = -D2_true*0.5*(r + 1)
+
+    q1 = (-b - np.sqrt(b**2 - 4*a*c))/(2*a)
+    q2 = (-b + np.sqrt(b**2 - 4*a*c))/(2*a)
+
+    if q1 > 0 and q1 < 1:
+        q_star = q1
+    else:
+        q_star = q2
+
+    qs_count = 3
+    qs = np.array([0.0, q_star, 1.0])
+
+    tensor = np.ones((x0_count, qs_count))
+
+    x0 = np.random.uniform(x0_min, x0_max, size=x0_count)
+
+    x0_all = (tensor*x0[:, None]).ravel()
+    qs_all = (tensor*qs[None, :]).ravel()
+
+    #sim_xs, f_calls = simulate_blo(r, alpha, as_, bs, A, x0_all, qs_all, 10, iter_count)
+    print('Done simulation')
+    #deriv_norms = np.abs(get_true_blo_derivs(r, alpha, as_, bs, A, sim_xs))
+    print('Done derivative computation')
+
+    #np.savez('toy_qcurves', sim_xs=sim_xs, f_calls=f_calls, deriv_norms=deriv_norms)
+    data = np.load('toy_qcurves.npz')
+    sim_xs, f_calls, deriv_norms = data['sim_xs'], data['f_calls'], data['deriv_norms']
+
+    deriv_norms = deriv_norms.reshape(-1, x0_count, qs_count)
+    deriv_norm_means = deriv_norms.mean(axis=1)
+    deriv_norm_stds = deriv_norms.std(axis=1)
+
+    f_calls = f_calls.reshape(-1, x0_count, qs_count)
+    f_calls = f_calls.mean(axis=1)
+
+    fig = plt.figure(figsize=(6, 5))
+
+    colors = []
+
+    for index in range(qs_count):
+
+        iters_to_plot = int(iter_count*(r + 1 + r*qs[0])/(r + 1 + r*qs[index]))
+
+        p = plt.plot(f_calls[:iters_to_plot, index], deriv_norm_means[:iters_to_plot, index],
+                label='q={:.2f}'.format(qs[index]), linewidth=3)
+        color = p[0].get_color()
+        lower = deriv_norm_means[:, index] - deriv_norm_stds[:, index]
+        upper = deriv_norm_means[:, index] + deriv_norm_stds[:, index]
+        plt.fill_between(f_calls[:iters_to_plot, index], lower[:iters_to_plot], upper[:iters_to_plot],
+                color=color, alpha=0.1)
+
+    plt.yscale('log') 
+    plt.ylim([None, 0.4])
+    plt.xlabel('func calls')
+    plt.ylabel('$| \\frac{\\partial}{\\partial \\theta} \mathcal{M}^{(r)} (\\theta_k) |$')
+    plt.legend()
+
+    fig.tight_layout()
+    plt.savefig('toy_qcurve.pdf', bbox_inches='tight')
+
+def simulate_bounds():
+
     r = 10
-    alpha = 0.1
     a1 = 0.5
     a2 = 1.5
-    D = 0.06
-    b1, b2, A = get_div_problem(r, alpha, a1, a2, D)
-    '''
+    b1 = 0
+    b2 = 10
+    A = 400
 
     x_min = -50
     x_max = 50
@@ -116,7 +212,7 @@ def simulate_bounds(subplot_indices):
     min_alpha = 0.001
     max_alpha = 0.05
 
-    x0_count = 1000
+    x0_count = 500
     runs_count = 1
     xs_count = 10000
     alphas_count = 10#10
@@ -160,41 +256,44 @@ def simulate_bounds(subplot_indices):
         D2s.append(D2)
         V2s.append(V2)
 
-    plt.subplot(subplot_indices[0])
+    fig = plt.figure(figsize=(6, 5))
 
-    plt.plot(alpha_range, D2s_true, 'b', label='$\\mathbb{D}^2_{true}$')
-    plt.plot(alpha_range, D2s, 'b--', label='$\\mathbb{D}^2$')
-    plt.plot(alpha_range, V2s_true, 'r', label='$\\mathbb{V\\,}^2_{true}$')
-    plt.plot(alpha_range, V2s, 'r--', label='$\\mathbb{V\\,}^2$')
+    plt.plot(alpha_range, D2s_true, 'k', label='$\\mathbb{D}^2$', linewidth=3)
+    #plt.plot(alpha_range, D2s, 'b--', label='$\\mathbb{D}^2$')
+    plt.plot(alpha_range, V2s_true, 'k--', label='$\\mathbb{V\\,}^2$', linewidth=3)
+    #plt.plot(alpha_range, V2s, 'r--', label='$\\mathbb{V\\,}^2$')
 
     plt.xscale('log')
     plt.yscale('log')
     plt.xlabel('$\\alpha$')
     plt.legend()
 
-    qs_count = 10
-    qs = np.linspace(0.1, 1.0, qs_count)
+    fig.tight_layout()
+    plt.savefig('toy_dv.pdf', bbox_inches='tight')
+
+    qs_count = 20
+    qs = np.linspace(0.05, 1.0, qs_count)
 
     tensor = np.ones((x0_count, runs_count, alphas_count, qs_count))
 
     x0 = np.random.uniform(x0_min, x0_max, size=x0_count)
 
-    x0_all = (tensor*x0[:, None, None, None]).ravel()
+    x0_all = np.random.uniform(x0_min, x0_max, size=len(tensor.ravel()))#(tensor*x0[:, None, None, None]).ravel()
     alphas_all = (tensor*alpha_range[None, None, :, None]).ravel()
     qs_all = (tensor*qs[None, None, None, :]).ravel()
 
-    sim_xs, f_calls = simulate_blo(r, alphas_all, as_, bs, A, x0_all, qs_all, 10, 1000)
+    #sim_xs, f_calls = simulate_blo(r, alphas_all, as_, bs, A, x0_all, qs_all, 10, 100)
     print('Done simulation')
-    sqr_derivs = get_true_blo_derivs(r, alphas_all, as_, bs, A, sim_xs)**2
+    #sqr_derivs = get_true_blo_derivs(r, alphas_all, as_, bs, A, sim_xs)**2
     print('Done derivative computation')
 
-    np.savez('toy', sim_xs=sim_xs, f_calls=f_calls, sqr_derivs=sqr_derivs)
-    #data = np.load('toy.npz')
-    #sim_xs, f_calls, sqr_derivs = data['sim_xs'], data['f_calls'], data['sqr_derivs']
+    #np.savez('toy', sim_xs=sim_xs, f_calls=f_calls, sqr_derivs=sqr_derivs)
+    data = np.load('toy.npz')
+    sim_xs, f_calls, sqr_derivs = data['sim_xs'], data['f_calls'], data['sqr_derivs']
 
     sqr_derivs = sqr_derivs.reshape(-1, x0_count, runs_count, alphas_count, qs_count)
     sqr_derivs = sqr_derivs.mean(axis=(1, 2))
-    deltas = sqr_derivs[-1, :, 0, None]*np.ones((alphas_count, qs_count))
+    deltas = sqr_derivs[:, :, 0, None].min(axis=0)*np.ones((alphas_count, qs_count))
     sqr_derivs = sqr_derivs.reshape(sqr_derivs.shape[0], -1)
     deltas = deltas.ravel()
 
@@ -204,7 +303,7 @@ def simulate_bounds(subplot_indices):
 
     reached_delta = (sqr_derivs <= deltas).astype(int)
     first_indices = reached_delta.argmax(axis=0)
-    first_indices[sqr_derivs[first_indices, np.arange(len(first_indices))] == 0] = sqr_derivs.shape[0] - 1
+    first_indices[reached_delta[first_indices, np.arange(len(first_indices))] == 0] = sqr_derivs.shape[0] - 1
 
     print(first_indices.reshape(alphas_count, qs_count))
 
@@ -235,19 +334,22 @@ def simulate_bounds(subplot_indices):
         else:
             best_th_qs.append(q2)
 
-    plt.subplot(subplot_indices[1])
+    fig = plt.figure(figsize=(6, 5))
 
     print(best_qs)
     print(best_th_qs)
 
-    plt.plot(alpha_range, best_qs, 'g', label='experiment')
-    plt.plot(alpha_range, best_th_qs, 'y--', label='theory')
+    plt.plot(alpha_range, best_qs, 'g', label='experiment', linewidth=3)
+    plt.plot(alpha_range, best_th_qs, 'y--', label='theory', linewidth=3)
     plt.plot()
 
     plt.xscale('log')
     plt.xlabel('$\\alpha$')
-    plt.ylabel('$q$')
+    plt.ylabel('$q^*$')
     plt.legend()
+
+    fig.tight_layout()
+    plt.savefig('toy_q.pdf', bbox_inches='tight')
 
 def get_div_problem(r, alpha, a1, a2, D):
 
@@ -353,10 +455,6 @@ def f_and_deriv(a, b, A, x):
 
 if __name__ == '__main__':
 
-    fig = plt.figure(figsize=(30, 10))
-
-    #simulate_fo_div([131, 132, 133])
-    simulate_bounds([121, 122])
-
-    fig.tight_layout()
-    plt.savefig('toy.pdf', bbox_inches='tight')
+    simulate_fo_div()
+    simulate_curves()
+    simulate_bounds()
