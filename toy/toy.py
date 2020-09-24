@@ -48,7 +48,7 @@ def simulate_fo_div(subplot_indices):
 
         x0 = np.random.uniform(x0_min, x0_max, size=samples_count)
 
-        cur_sim_xs, _ = simulate_blo(r, alpha, as_, bs, A, x0, q, 10)
+        cur_sim_xs, _ = simulate_blo(r, alpha, as_, bs, A, x0, q, 10, 10000)
         cur_sim_val = get_true_blo_values(r, alpha, as_, bs, A, cur_sim_xs)[-1]
         cur_sim_derivs = get_true_blo_derivs(r, alpha, as_, bs, A, cur_sim_xs)
 
@@ -93,7 +93,7 @@ def simulate_fo_div(subplot_indices):
 def simulate_bounds(subplot_indices):
 
     r = 10
-    a1 = 1.0
+    a1 = 0.5
     a2 = 1.5
     b1 = 0
     b2 = 10
@@ -116,10 +116,10 @@ def simulate_bounds(subplot_indices):
     min_alpha = 0.001
     max_alpha = 0.05
 
-    x0_count = 500
+    x0_count = 1000
     runs_count = 1
     xs_count = 10000
-    alphas_count = 5#10
+    alphas_count = 10#10
 
     as_ = np.array([a1, a2])
     bs = np.array([b1, b2])
@@ -172,7 +172,7 @@ def simulate_bounds(subplot_indices):
     plt.xlabel('$\\alpha$')
     plt.legend()
 
-    qs_count = 5#10
+    qs_count = 10
     qs = np.linspace(0.1, 1.0, qs_count)
 
     tensor = np.ones((x0_count, runs_count, alphas_count, qs_count))
@@ -183,7 +183,7 @@ def simulate_bounds(subplot_indices):
     alphas_all = (tensor*alpha_range[None, None, :, None]).ravel()
     qs_all = (tensor*qs[None, None, None, :]).ravel()
 
-    sim_xs, f_calls = simulate_blo(r, alphas_all, as_, bs, A, x0_all, qs_all, 1)
+    sim_xs, f_calls = simulate_blo(r, alphas_all, as_, bs, A, x0_all, qs_all, 10, 1000)
     print('Done simulation')
     sqr_derivs = get_true_blo_derivs(r, alphas_all, as_, bs, A, sim_xs)**2
     print('Done derivative computation')
@@ -279,9 +279,7 @@ def get_true_blo_derivs(r, alpha, as_, bs, A, xs):
 
     return (blo_and_deriv(r, alpha, as_[0], bs[0], A, xs)[2] + blo_and_deriv(r, alpha, as_[1], bs[1], A, xs)[2])/2
 
-def simulate_blo(r, alpha, as_, bs, A, x, q, start_step):
-
-    iter_count = 10000
+def simulate_blo(r, alpha, as_, bs, A, x, q, start_step, iter_count):
 
     xs = []
     f_calls = []
