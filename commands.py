@@ -1,5 +1,62 @@
 all_h_params = []
 
+# FOML Mini-ImageNet.
+for seed in [0, 1, 2]:
+    for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10), (1, 20, 10)]:
+        for prob in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+            h_params = {
+                "config.dataset": "miniimagenet",
+                "config.seed": seed,
+                "config.shots": n_shots,
+                "config.classes": n_classes,
+                "config.inner_batch": 10,
+                "config.inner_iters": 8,
+                "config.meta_step": 1,
+                "config.meta_batch": 5,
+                "config.meta_iters": 100000,
+                "config.eval_batch": eval_batch,
+                "config.eval_iters": 8,
+                "config.learning_rate": 0.001,
+                "config.meta_step_final": 0,
+                "config.checkpoint": "ckpt_m{0}{1}_FOML_pr={2}_seed={3}".format(n_shots, n_classes, prob, seed),
+                "config.mode": "FOML",
+                "config.exact_prob": prob,
+                "config.clip_grads": True,
+                "config.clip_grad_value": 0.1,
+                "config.train_shots": None,
+                "config.on_resampling": False
+            }
+            all_h_params.append(h_params)
+     
+
+# Mini-ImageNet Reptile
+for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10), (1, 20, 10)]:
+    for seed in [0, 1, 2]:
+        h_params = {
+            "config.dataset": "miniimagenet",
+            "config.seed": seed,
+            "config.shots": n_shots,
+            "config.classes": n_classes,
+            "config.inner_batch": 10,
+            "config.inner_iters": 8,
+            "config.meta_step": 1,
+            "config.meta_batch": 5,
+            "config.meta_iters": 100000,
+            "config.eval_batch": eval_batch,
+            "config.eval_iters": 50,
+            "config.learning_rate": 0.001,
+            "config.meta_step_final": 0,
+            "config.train_shots": 15,
+            "config.checkpoint": "ckpt_m{0}{1}_Reptile_seed={2}".format(n_shots, n_classes, seed),
+            "config.mode": 'Reptile',
+            "config.adam": True
+        }
+        all_h_params.append(h_params)
+
+
+
+## Old commands
+'''
 # Omniglot FOML
 for seed in [0, 1, 2]:
     for n_classes in [20, 30, 40, 50]:
@@ -109,3 +166,4 @@ for n_classes in [10]:
                 "config.adam": True
             }
             all_h_params.append(h_params)
+'''
