@@ -113,9 +113,9 @@ def simulate_curves():
 
     alpha = 0.01
 
-    x0_count = 500
+    x0_count = 1000
 
-    iter_count = 10000
+    iter_count = 20000
 
     as_ = np.array([a1, a2])
     bs = np.array([b1, b2])
@@ -188,7 +188,7 @@ def simulate_curves():
 
     plt.yscale('log') 
     plt.ylim([None, 0.4])
-    plt.xlabel('func calls')
+    plt.xlabel('time')
     plt.ylabel('$| \\frac{\\partial}{\\partial \\theta} \mathcal{M}^{(r)} (\\theta_k) |$')
     plt.legend()
 
@@ -212,7 +212,7 @@ def simulate_bounds():
     min_alpha = 0.001
     max_alpha = 0.05
 
-    x0_count = 500
+    x0_count = 2000
     runs_count = 1
     xs_count = 10000
     alphas_count = 10#10
