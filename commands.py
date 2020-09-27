@@ -1,5 +1,7 @@
 all_h_params = []
 
+# old commands
+'''
 # FOML Mini-ImageNet.
 for seed in [0, 1, 2]:
     for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10), (1, 20, 10)]:
@@ -52,16 +54,13 @@ for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10), (1, 2
             "config.adam": True
         }
         all_h_params.append(h_params)
-
-
-
-## Old commands
 '''
+
 # Omniglot FOML
 for seed in [0, 1, 2]:
     for n_classes in [20, 30, 40, 50]:
         for inner_iters in [10]:
-                for prob in [-3.0, -2.0, -1.0, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+                for prob in [0.0, 0.2, 0.4, 0.6, 0.8]:
                     h_params = {
                         "config.dataset": "omniglot",
                         "config.seed": seed,
@@ -71,7 +70,7 @@ for seed in [0, 1, 2]:
                         "config.inner_iters": inner_iters,
                         "config.meta_step": 0.1,
                         "config.meta_batch": 5,
-                        "config.meta_iters": 200000,
+                        "config.meta_iters": 480000,
                         "config.eval_batch": n_classes,
                         "config.eval_iters": inner_iters,
                         "config.learning_rate": 0.005,
@@ -115,8 +114,8 @@ for n_classes in [20, 30, 40, 50]:
 for seed in [0, 1, 2]:
     for learning_rate in [0.001]:
         for n_classes in [10]:
-            for inner_iters in [10]:
-                for prob in [-3.0, -2.0, -1.0, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+            for inner_iters in [8]:
+                for prob in [0.0, 0.2, 0.4, 0.6, 0.8]:
                     h_params = {
                         "config.dataset": "miniimagenet",
                         "config.seed": seed,
@@ -152,7 +151,7 @@ for n_classes in [10]:
                 "config.shots": 1,
                 "config.classes": n_classes,
                 "config.inner_batch": 10,
-                "config.inner_iters": inner_iters,
+                "config.inner_iters": 8,
                 "config.meta_step": 0.001/learning_rate,
                 "config.meta_batch": 5,
                 "config.meta_iters": 100000,
@@ -166,4 +165,3 @@ for n_classes in [10]:
                 "config.adam": True
             }
             all_h_params.append(h_params)
-'''
