@@ -70,6 +70,7 @@ mini_imagenet_meta_iters = {(1, 10, 0.0): 238000,
                             (1, 10, 0.8): 107000}
 '''
 
+'''
 # Omniglot FOML
 for seed in [0, 1, 2]:
     for n_classes in [20, 30, 40, 50]:
@@ -123,13 +124,14 @@ for n_classes in [20, 30, 40, 50]:
                 "config.adam": True
             }
             all_h_params.append(h_params)
+'''
 
 # FOML Mini-ImageNet.
 for seed in [0, 1, 2]:
     for learning_rate in [0.001]:
         for n_classes in [10]:
             for inner_iters in [8]:
-                for prob in [0.0, 0.2, 0.4, 0.6, 0.8]:
+                for prob in [1.0]: #[0.0, 0.2, 0.4, 0.6, 0.8]:
                     h_params = {
                         "config.dataset": "miniimagenet",
                         "config.seed": seed,
@@ -155,6 +157,7 @@ for seed in [0, 1, 2]:
                     }
                     all_h_params.append(h_params)
 
+'''
 # Mini-ImageNet Reptile
 for n_classes in [10]:
     for learning_rate in [0.001]:
@@ -179,3 +182,4 @@ for n_classes in [10]:
                 "config.adam": True
             }
             all_h_params.append(h_params)
+'''
