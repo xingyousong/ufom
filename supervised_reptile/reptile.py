@@ -22,6 +22,7 @@ class Reptile:
     Typically, MAML is used in a transductive manner.
     """
     def __init__(self, session, variables=None, transductive=False, pre_step_op=None, model=None):
+        self.name = 'Reptile'
         self.session = session
         self._model_state = VariableState(self.session, variables or tf.trainable_variables())
         self._full_state = VariableState(self.session,
@@ -147,6 +148,7 @@ class UnbMAML(Reptile):
     def __init__(self, session, mode=None, model=None, tail_shots=None, variables=None,
             transductive=False, pre_step_op=None, exact_prob=None, on_resampling=None):
 
+        self.name = 'UnbMAML'
         self.session = session
 
         if variables is None:
@@ -160,9 +162,17 @@ class UnbMAML(Reptile):
         self._pre_step_op = pre_step_op
 
         self.mode = mode
-        self.exact_prob = exact_prob
         self.model = model
         self.on_resampling = on_resampling
+
+        if exact_prob < 0:
+            self.min_exact_prob = 0.05
+            self.beta = 0.1
+            self.D2_smoothed = 0.0
+            self.V2_smoothed = 0.0
+            self.smooth_steps = 0
+        else:
+          self.exact_prob = exact_prob
 
         self._learning_rate = model.learning_rate
 
@@ -196,21 +206,50 @@ class UnbMAML(Reptile):
 
         init_vars = self._model_state.export_variables()
 
-        on_exact_count = 0
+        f_calls = 0
 
         for meta_batch_index in range(meta_batch_size):
 
-            if self.exact_prob >= 0.0:
+            if self.exact_prob >= -1e-8:
                 exact_prob = self.exact_prob
+            elif self.smooth_steps == 0:
+                exact_prob = self.min_exact_prob
             else:
-                exact_prob = np.power(frac_done, -self.exact_prob)
+
+                D2 = self.D2_smoothed/(1 - np.power(self.beta, self.smooth_steps))
+                V2 = self.V2_smoothed/(1 - np.power(self.beta, self.smooth_steps))
+
+                D2 = D2/10
+
+                Cdet = inner_iters + 1
+                Crnd = ((inner_iters - 1)/2 + 1)*inner_iters
+
+                if D2 >= 0.5*Crnd*V2/(Cdet + Crnd):
+                    exact_prob = 1.0
+                else:
+
+                    a = (V2 - D2)*Crnd
+                    b = -D2*Crnd
+                    c = -2*D2*Cdet
+
+                    p1 = (-b - np.sqrt(b**2 - 4*a*c))/(2*a)
+                    p2 = (-b + np.sqrt(b**2 - 4*a*c))/(2*a)
+
+                    if p1 > 0 and p1 < 1:
+                        exact_prob = p1
+                    else:
+                        exact_prob = p2
+
+                    if exact_prob < self.min_exact_prob:
+                        exact_prob = self.min_exact_prob
 
             on_exact = (np.random.rand() < exact_prob)
-            
 
             if on_exact:
-                on_exact_count += 1
+                f_calls += (inner_iters - 1)*inner_iters//2 + inner_iters
                 var_states = [init_vars]
+            else:
+                f_calls += inner_iters + 1
 
             if self.on_resampling:
                 mini_dataset = _sample_mini_dataset(dataset, num_classes, num_shots)
@@ -244,12 +283,22 @@ class UnbMAML(Reptile):
                 update = add_vars(update, scale_vars(subtract_vars(exact_update, update),
                     1/self.exact_prob))
 
+                smooth_steps += 1
+
+                if self.exact_prob < 0:
+
+                    cur_D2 = sum([((fo - o)**2).sum() for fo, o in zip(update, exact_update)])
+                    cur_V2 = sum([(o**2).sum() for o in exact_update])
+
+                    self.D2_smoothed = self.beta*D2_smoothed + (1 - self.beta)*cur_D2
+                    self.V2_smoothed = self.beta*V2_smoothed + (1 - self.beta)*cur_V2
+
             updates.append(update)
 
         update = average_vars(updates)
         self._model_state.import_variables(add_vars(init_vars, scale_vars(update, meta_step_size)))
 
-        return on_exact_count
+        return f_calls
 
     def _get_test_update(self, input_ph, label_ph, test_batch, minimize_op):
 
@@ -366,6 +415,7 @@ class FOML(Reptile):
           kwargs: kwargs for Reptile.
         """
         super(FOML, self).__init__(*args, **kwargs)
+        self.name = 'FOML'
         self.tail_shots = tail_shots
 
     # pylint: disable=R0913,R0914

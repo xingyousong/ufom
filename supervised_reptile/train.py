@@ -53,9 +53,10 @@ def train(sess,
     accuracy_ph = tf.placeholder(tf.float32, shape=())
     acc_summary = tf.summary.scalar('accuracy', accuracy_ph)
 
-    total_on_exact_count = 0
-    on_exact_count_ph = tf.placeholder(tf.int32, shape=())
-    on_exact_count_summary = tf.summary.scalar('on_exact_count', on_exact_count_ph)
+    total_f_calls = 0
+    i = 0
+    f_calls_ph = tf.placeholder(tf.int32, shape=())
+    f_calls_summary = tf.summary.scalar('f_calls', f_calls_ph)
 
     #merged = tf.summary.merge_all()
 
@@ -63,7 +64,12 @@ def train(sess,
     test_writer = tf.summary.FileWriter(os.path.join(save_dir, 'test'), sess.graph)
     tf.global_variables_initializer().run()
     sess.run(tf.global_variables_initializer())
-    for i in range(meta_iters):
+
+    full_f_calls_per_iter = meta_batch_size*(inner_iters + 1 + inner_iters*(inner_iters - 1)//2)
+    max_f_calls = meta_iters*full_f_calls_per_iter
+
+    while total_f_calls < max_f_calls:
+
         frac_done = i / meta_iters
         cur_meta_step_size = frac_done * meta_step_size_final + (1 - frac_done) * meta_step_size
 
@@ -74,13 +80,21 @@ def train(sess,
                 meta_batch_size=meta_batch_size, frac_done=frac_done)
 
         if result is not None:
-            total_on_exact_count += result
-            summary = sess.run(on_exact_count_summary, feed_dict={on_exact_count_ph: total_on_exact_count})
-            train_writer.add_summary(summary, i)
+            total_f_calls += result 
+        elif reptile.name == 'Reptile':
+            total_f_calls += inner_iters*meta_batch_size
+        elif reptile.name == 'FOML':
+            total_f_calls += (inner_iters + 1)*meta_batch_size
 
         if i%eval_interval == 0:
+
+            summary = sess.run(f_calls_summary, feed_dict={f_calls_ph: total_f_calls})
+            train_writer.add_summary(summary, i)
+
             accuracies = []
+
             for dataset, writer in [(train_set, train_writer), (test_set, test_writer)]:
+
                 correct = reptile.evaluate(dataset, model.input_ph, model.label_ph,
                                            model.minimize_op, model.predictions,
                                            num_classes=num_classes, num_shots=num_shots,
@@ -99,3 +113,5 @@ def train(sess,
             saver.save(sess, os.path.join(save_dir, 'model.ckpt'), global_step=i)
         if time_deadline is not None and time.time() > time_deadline:
             break
+
+        i += 1

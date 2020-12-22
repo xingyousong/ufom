@@ -1,13 +1,11 @@
 all_h_params = []
 
 
-
-
 # CIFAR100 FOML
-for seed in [0, 1, 2]:
+for seed in [0]:
     for n_classes in [5, 10, 15]:
         for inner_iters in [10]:
-                for prob in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+                for prob in [0.0, -1.0, 1.0]:
                     h_params = {
                         "config.dataset": "cifar100",
                         "config.seed": seed,
@@ -17,7 +15,7 @@ for seed in [0, 1, 2]:
                         "config.inner_iters": inner_iters,
                         "config.meta_step": 0.1,
                         "config.meta_batch": 5,
-                        "config.meta_iters": int(40000*66/(11 + prob*55)),
+                        "config.meta_iters": 40000,
                         "config.eval_batch": n_classes,
                         "config.eval_iters": inner_iters,
                         "config.learning_rate": 0.005,
@@ -26,7 +24,7 @@ for seed in [0, 1, 2]:
                         "config.checkpoint": "ckpt_c1{0}_FOML_prob={1}_ii={2}_seed={3}".format(n_classes, prob, inner_iters, seed),
                         "config.mode": 'FOML',
                         "config.exact_prob": prob,
-                        "config.clip_grads": (inner_iters == 10),
+                        "config.clip_grads": True,
                         "config.clip_grad_value": 0.1,
                         "config.on_resampling": False
                     }
@@ -35,17 +33,17 @@ for seed in [0, 1, 2]:
 # CIFAR100 Reptile
 for n_classes in [5, 10, 15]:
     for learning_rate in [0.0005]:
-        for seed in [0, 1, 2]:
+        for seed in [0]:
             h_params = {
                 "config.dataset": "cifar100",
-                "config.seed": seed,
+                "config.seed": 0,
                 "config.shots": 1,
                 "config.classes": n_classes,
                 "config.inner_batch": n_classes,
                 "config.inner_iters": 10,
                 "config.meta_step": 0.0005/learning_rate,
                 "config.meta_batch": 5,
-                "config.meta_iters": int(40000*66/10),
+                "config.meta_iters": 40000,
                 "config.eval_batch": 10,
                 "config.eval_iters": 50,
                 "config.learning_rate": learning_rate,
@@ -58,21 +56,10 @@ for n_classes in [5, 10, 15]:
             all_h_params.append(h_params)
 
 
-
-
-
-
-
-
-
-
-
-# old commands
-'''
 # FOML Mini-ImageNet.
-for seed in [0, 1, 2]:
-    for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10), (1, 20, 10)]:
-        for prob in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+for seed in [0]:
+    for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10)]:
+        for prob in [0.0, -1.0, 1.0]:
             h_params = {
                 "config.dataset": "miniimagenet",
                 "config.seed": seed,
@@ -96,11 +83,10 @@ for seed in [0, 1, 2]:
                 "config.on_resampling": False
             }
             all_h_params.append(h_params)
-     
 
 # Mini-ImageNet Reptile
-for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10), (1, 20, 10)]:
-    for seed in [0, 1, 2]:
+for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10)]:
+    for seed in [0]:
         h_params = {
             "config.dataset": "miniimagenet",
             "config.seed": seed,
@@ -121,14 +107,13 @@ for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10), (1, 2
             "config.adam": True
         }
         all_h_params.append(h_params)
-'''
 
-'''
+
 # Omniglot FOML
-for seed in [0, 1, 2]:
-    for n_classes in [20, 30, 40, 50]:
+for seed in [0]:
+    for n_classes in [5, 10, 15, 20, 30, 40]:
         for inner_iters in [10]:
-                for prob in [0.0, 0.2, 0.4, 0.6, 0.8]:
+                for prob in [0.0, -1.0, 1.0]:
                     h_params = {
                         "config.dataset": "omniglot",
                         "config.seed": seed,
@@ -138,7 +123,7 @@ for seed in [0, 1, 2]:
                         "config.inner_iters": inner_iters,
                         "config.meta_step": 0.1,
                         "config.meta_batch": 5,
-                        "config.meta_iters": int(200000*66/(11 + prob*55)),
+                        "config.meta_iters": 200000,
                         "config.eval_batch": n_classes,
                         "config.eval_iters": inner_iters,
                         "config.learning_rate": 0.005,
@@ -154,9 +139,9 @@ for seed in [0, 1, 2]:
                     all_h_params.append(h_params)
 
 # Omniglot Reptile
-for n_classes in [20, 30, 40, 50]:
+for n_classes in [5, 10, 15, 20, 30, 40]:
     for learning_rate in [0.0005]:
-        for seed in [0, 1, 2]:
+        for seed in [0]:
             h_params = {
                 "config.dataset": "omniglot",
                 "config.seed": seed,
@@ -166,7 +151,7 @@ for n_classes in [20, 30, 40, 50]:
                 "config.inner_iters": 10,
                 "config.meta_step": 0.0005/learning_rate,
                 "config.meta_batch": 5,
-                "config.meta_iters": int(200000*66/10),
+                "config.meta_iters": 200000,
                 "config.eval_batch": 10,
                 "config.eval_iters": 50,
                 "config.learning_rate": learning_rate,
@@ -177,7 +162,7 @@ for n_classes in [20, 30, 40, 50]:
                 "config.adam": True
             }
             all_h_params.append(h_params)
-'''
+
 '''
 # FOML Mini-ImageNet.
 for seed in [0, 1, 2]:
@@ -209,8 +194,7 @@ for seed in [0, 1, 2]:
                         "config.on_resampling": False
                     }
                     all_h_params.append(h_params)
-'''
-'''
+
 # Mini-ImageNet Reptile
 for n_classes in [10]:
     for learning_rate in [0.001]:
