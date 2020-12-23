@@ -171,8 +171,8 @@ class UnbMAML(Reptile):
             self.D2_smoothed = 0.0
             self.V2_smoothed = 0.0
             self.smooth_steps = 0
-        else:
-          self.exact_prob = exact_prob
+
+        self.exact_prob = exact_prob
 
         self._learning_rate = model.learning_rate
 
@@ -283,15 +283,15 @@ class UnbMAML(Reptile):
                 update = add_vars(update, scale_vars(subtract_vars(exact_update, update),
                     1/self.exact_prob))
 
-                smooth_steps += 1
-
                 if self.exact_prob < 0:
+
+                    self.smooth_steps += 1
 
                     cur_D2 = sum([((fo - o)**2).sum() for fo, o in zip(update, exact_update)])
                     cur_V2 = sum([(o**2).sum() for o in exact_update])
 
-                    self.D2_smoothed = self.beta*D2_smoothed + (1 - self.beta)*cur_D2
-                    self.V2_smoothed = self.beta*V2_smoothed + (1 - self.beta)*cur_V2
+                    self.D2_smoothed = self.beta*self.D2_smoothed + (1 - self.beta)*cur_D2
+                    self.V2_smoothed = self.beta*self.V2_smoothed + (1 - self.beta)*cur_V2
 
             updates.append(update)
 
