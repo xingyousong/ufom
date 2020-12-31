@@ -70,7 +70,7 @@ def train(sess,
 
     while total_f_calls < max_f_calls:
 
-        frac_done = i / meta_iters
+        frac_done = total_f_calls / max_f_calls
         cur_meta_step_size = frac_done * meta_step_size_final + (1 - frac_done) * meta_step_size
 
         result = reptile.train_step(train_set, model.input_ph, model.label_ph, model.minimize_op,

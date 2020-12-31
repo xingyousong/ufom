@@ -281,7 +281,7 @@ class UnbMAML(Reptile):
                     var_states, minimize_op)
 
                 update = add_vars(update, scale_vars(subtract_vars(exact_update, update),
-                    1/self.exact_prob))
+                    1/exact_prob))
 
                 if self.exact_prob < 0:
 
