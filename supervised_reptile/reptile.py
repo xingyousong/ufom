@@ -219,7 +219,7 @@ class UnbMAML(Reptile):
                 D2 = self.D2_smoothed/(1 - np.power(self.beta, self.smooth_steps))
                 V2 = self.V2_smoothed/(1 - np.power(self.beta, self.smooth_steps))
 
-                D2 = D2/10
+                D2 = D2#/10
 
                 Cdet = inner_iters + 1
                 Crnd = ((inner_iters - 1)/2 + 1)*inner_iters
