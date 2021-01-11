@@ -3,7 +3,7 @@ all_h_params = []
 
 # CIFAR100 FOML
 for seed in [0]:
-    for n_classes in [5, 10, 15]:
+    for n_classes in [20, 30]: #[5, 10, 15]:
         for inner_iters in [10]:
                 for prob in [0.0, -1.0, 1.0]:
                     h_params = {
@@ -31,7 +31,7 @@ for seed in [0]:
                     all_h_params.append(h_params)
 
 # CIFAR100 Reptile
-for n_classes in [5, 10, 15]:
+for n_classes in [20, 30]:#[5, 10, 15]:
     for learning_rate in [0.0005]:
         for seed in [0]:
             h_params = {
@@ -55,7 +55,7 @@ for n_classes in [5, 10, 15]:
             }
             all_h_params.append(h_params)
 
-
+'''
 # FOML Mini-ImageNet.
 for seed in [0]:
     for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10)]:
@@ -107,11 +107,11 @@ for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10)]:
             "config.adam": True
         }
         all_h_params.append(h_params)
-
+'''
 
 # Omniglot FOML
 for seed in [0]:
-    for n_classes in [5, 10, 15, 20, 30, 40]:
+    for n_classes in [50, 60]:#[5, 10, 15, 20, 30, 40]:
         for inner_iters in [10]:
                 for prob in [0.0, -1.0, 1.0]:
                     h_params = {
@@ -139,7 +139,7 @@ for seed in [0]:
                     all_h_params.append(h_params)
 
 # Omniglot Reptile
-for n_classes in [5, 10, 15, 20, 30, 40]:
+for n_classes in [50, 60]:#[5, 10, 15, 20, 30, 40]:
     for learning_rate in [0.0005]:
         for seed in [0]:
             h_params = {
