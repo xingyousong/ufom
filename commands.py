@@ -1,6 +1,37 @@
 all_h_params = []
 
 
+# Omniglot FOML
+for seed in [0]:
+    for n_classes in [40]:
+        for inner_iters in [10]:
+                for prob in [0.0]:
+                    h_params = {
+                        "config.dataset": "omniglot",
+                        "config.seed": seed,
+                        "config.shots": 1,
+                        "config.classes": n_classes,
+                        "config.inner_batch": n_classes,
+                        "config.inner_iters": inner_iters,
+                        "config.meta_step": 0.1,
+                        "config.meta_batch": 5,
+                        "config.meta_iters": 200000,
+                        "config.eval_batch": n_classes,
+                        "config.eval_iters": inner_iters,
+                        "config.learning_rate": 0.005,
+                        "config.train_shots": None,
+                        "config.meta_step_final": 0,
+                        "config.checkpoint": "ckpt_o1{0}_FOML_prob={1}_ii={2}_seed={3}".format(n_classes, prob, inner_iters, seed),
+                        "config.mode": 'FOML',
+                        "config.exact_prob": prob,
+                        "config.clip_grads": (inner_iters == 10),
+                        "config.clip_grad_value": 0.1,
+                        "config.on_resampling": False
+                    }
+                    all_h_params.append(h_params)
+
+'''
+
 # CIFAR100 FOML
 for seed in [0]:
     for n_classes in [20, 30]: #[5, 10, 15]:
@@ -54,7 +85,7 @@ for n_classes in [20, 30]:#[5, 10, 15]:
                 "config.adam": True
             }
             all_h_params.append(h_params)
-
+'''
 '''
 # FOML Mini-ImageNet.
 for seed in [0]:
@@ -108,7 +139,7 @@ for n_shots, n_classes, eval_batch in [(5, 5, 15), (1, 5, 5), (1, 15, 10)]:
         }
         all_h_params.append(h_params)
 '''
-
+'''
 # Omniglot FOML
 for seed in [0]:
     for n_classes in [50, 60]:#[5, 10, 15, 20, 30, 40]:
@@ -162,7 +193,7 @@ for n_classes in [50, 60]:#[5, 10, 15, 20, 30, 40]:
                 "config.adam": True
             }
             all_h_params.append(h_params)
-
+'''
 '''
 # FOML Mini-ImageNet.
 for seed in [0, 1, 2]:
