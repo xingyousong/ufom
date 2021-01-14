@@ -2,7 +2,7 @@ all_h_params = []
 
 
 # Omniglot FOML
-for seed in [0]:
+for seed in [0, 1, 2]:
     for n_classes in [40]:
         for inner_iters in [10]:
                 for prob in [0.0]:
