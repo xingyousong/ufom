@@ -6,7 +6,7 @@ Experiments with hyperparameter tuning configurations can be found in `commands.
 
 If you found this codebase to be useful, please consider citing our paper:
 
-````
+```
 @article{ufom,
   author    = {Valerii Likhosherstov and
                Xingyou Song and
@@ -21,5 +21,4 @@ If you found this codebase to be useful, please consider citing our paper:
   archivePrefix = {arXiv},
   eprint    = {2106.02487}
 }
-
 ```
